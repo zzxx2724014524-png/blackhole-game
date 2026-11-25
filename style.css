@@ -119,3 +119,30 @@ button{font-family:inherit;cursor:pointer}
 #feed{top:calc(env(safe-area-inset-top) + 100px)!important}
 #fx{top:calc(env(safe-area-inset-top) + 190px)}
 #seaHud{position:absolute;inset:0;pointer-events:none;background:radial-gradient(ellipse at 50% 48%,transparent 40%,rgba(2,28,60,.6))}
+/* ---------- v3 闯关 ---------- */
+.mode.lvmode{background:linear-gradient(90deg,rgba(255,212,59,.28),rgba(255,146,43,.14))}
+.lvpanel{max-height:92vh;display:flex;flex-direction:column;width:min(94vw,420px)}
+.lvhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.lvhead h2{margin:0;font-size:22px}
+.lvhead .sm{width:auto;padding:6px 12px;margin:0;font-size:14px}
+#lvStars{color:#ffd43b;font-weight:800}
+#lvGrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;overflow-y:auto;padding:2px 2px 8px;-webkit-overflow-scrolling:touch}
+#lvGrid button{position:relative;aspect-ratio:1/1.1;border:0;border-radius:14px;background:rgba(255,255,255,.12);color:#fff;font-weight:900;font-size:18px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0;cursor:pointer}
+#lvGrid button small{font-size:15px;line-height:1}
+#lvGrid button em{font-style:normal;font-size:10px;letter-spacing:-1px;color:#ffd43b;line-height:1}
+#lvGrid button em .off{color:rgba(255,255,255,.25)}
+#lvGrid button.lock{background:rgba(0,0,0,.25);color:rgba(255,255,255,.35)}
+#lvGrid button.cur{box-shadow:0 0 0 3px #ffd43b inset}
+#overStars{display:flex;justify-content:center;gap:8px;margin:4px 0 8px}
+#overStars i{font-style:normal;font-size:46px;color:rgba(255,255,255,.18);transform:scale(.6);transition:transform .3s cubic-bezier(.3,1.8,.5,1),color .2s}
+#overStars i.on{color:#ffd43b;transform:scale(1);text-shadow:0 3px 0 #c76b00}
+#solo .bar{position:relative}
+#solo .bar i.mk{position:absolute;top:-5px;width:2px;height:calc(100% + 10px);background:#fff;opacity:.85}
+#solo .bar i.mk::after{content:'★';position:absolute;top:12px;left:-6px;font-size:12px;color:#ffd43b}
+.pop.time{color:#ffe066;font-size:28px;text-shadow:0 2px 0 #b06000,0 0 10px #fff}
+body.lv #lb{display:none}
+body.lv #solo{top:calc(env(safe-area-inset-top) + 124px);width:230px}
+#solo .bar{overflow:visible}
+#solo .bar i:first-child{border-radius:4px}
+#hint{position:fixed;left:0;top:0;display:none;pointer-events:none;font-size:26px;color:#ffd43b;text-shadow:0 2px 0 #b35c00,0 0 8px rgba(0,0,0,.4);animation:hintb .6s ease-in-out infinite alternate;z-index:5}
+@keyframes hintb{from{margin-top:-6px}to{margin-top:2px}}

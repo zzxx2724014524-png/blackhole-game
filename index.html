@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1b1430">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%23000%22 stroke=%22%237b5cff%22 stroke-width=%223%22/%3E%3C/svg%3E">
 <title>黑洞入侵 · 网页版</title>
-<link rel="stylesheet" href="style.css?v=2">
+<link rel="stylesheet" href="style.css?v=3">
 <script type="importmap">{"imports":{"three":"./lib/three.module.js"}}</script>
 </head>
 <body>
@@ -42,6 +42,7 @@
   <div id="btns"><button id="muteBtn" title="声音">🔊</button><button id="pauseBtn" title="暂停">⏸</button></div>
 </div>
 <div id="flash"></div>
+<div id="hint">⬇</div>
 <div id="joy" class="hidden"><div id="joyKnob"></div></div>
 <div id="menu" class="screen">
   <div class="panel">
@@ -50,7 +51,8 @@
     <label class="name">昵称 <input id="nameInput" maxlength="8" value="鸭鸭"></label>
     <div class="skins" id="skins"></div>
     <div class="modes">
-      <button class="mode active" data-mode="classic"><b>经典模式</b><span>2分钟 · 吃得最多者胜</span></button>
+      <button class="mode active lvmode" data-mode="level"><b>🏆 闯关模式</b><span id="lvModeSub">50 关 · 吃光地图拿三星 · 金币加时</span></button>
+      <button class="mode" data-mode="classic"><b>经典模式</b><span>2分钟 · 吃得最多者胜</span></button>
       <button class="mode" data-mode="battle"><b>大逃杀</b><span>只有一条命 · 活到最后</span></button>
       <button class="mode" data-mode="solo"><b>单人模式</b><span>2分钟 · 吞掉尽量多的城市</span></button>
       <button class="mode sea" data-mode="sea"><b>🌊 海底模式</b><span>化身漩涡 · 追鱼群、躲水母、吃气泡续氧</span></button>
@@ -60,6 +62,12 @@
   </div>
 </div>
 
+<div id="levelSel" class="screen hidden">
+  <div class="panel lvpanel">
+    <div class="lvhead"><button id="lvBack" class="ghost sm">‹ 返回</button><h2>闯关模式</h2><span id="lvStars">★ 0/150</span></div>
+    <div id="lvGrid"></div>
+  </div>
+</div>
 <div id="count" class="hidden"></div>
 <div id="dead" class="hidden"><div><b id="deadBy">你被吞掉了！</b><span id="deadT">3 秒后复活</span></div></div>
 <div id="paused" class="screen hidden"><div class="panel small"><h2>已暂停</h2><button id="resumeBtn" class="big">继续</button><button id="quitBtn" class="ghost">返回主页</button></div></div>
@@ -69,11 +77,14 @@
     <h2 id="overTitle">时间到！</h2>
     <div id="myRank"></div>
     <ol id="rankList"></ol>
+    <div id="overStars" class="hidden"><i>★</i><i>★</i><i>★</i></div>
+    <button id="nextBtn" class="big hidden">下一关 ›</button>
     <button id="againBtn" class="big">再来一局</button>
+    <button id="selBtn" class="ghost hidden">选择关卡</button>
     <button id="homeBtn" class="ghost">返回主页</button>
   </div>
 </div>
 <div id="loading">城市建造中…</div>
-<script type="module" src="js/game.js?v=2"></script>
+<script type="module" src="js/game.js?v=3"></script>
 </body>
 </html>
