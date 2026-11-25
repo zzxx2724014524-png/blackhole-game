@@ -1,10 +1,11 @@
 // 黑洞入侵 · 网页版 v2 —— 主逻辑（城市模式 + 海底模式入口）
 import * as THREE from 'three';
-import { buildTypes, makeMaterial } from './models.js?v=4';
-import { generateCity, buildGround, BOUND, HALF, roadCenters } from './city.js?v=4';
-import { levelDef, LEVEL_COUNT, THEMES } from './levels.js?v=4';
-import { Sfx } from './audio.js?v=4';
-import { SeaWorld } from './sea.js?v=4';
+import { buildTypes, makeMaterial } from './models.js?v=5';
+import { generateCity, buildGround, BOUND, HALF, roadCenters } from './city.js?v=5';
+import { levelDef, LEVEL_COUNT, THEMES } from './levels.js?v=5';
+import { Sfx } from './audio.js?v=5';
+import { SeaWorld } from './sea.js?v=5';
+import { SKINS, skinById, swatch, rimGeo as skinRimGeo, skinMaterial, SkinFx } from './skins.js?v=5';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
@@ -71,7 +72,7 @@ const pitMat = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.Bac
 const bottomGeo = new THREE.CircleGeometry(1, 24).rotateX(-Math.PI / 2).translate(0, -1, 0);
 const bottomMat = new THREE.MeshBasicMaterial({ color: 0x000000, fog: false });
 const rimGeo = new THREE.RingGeometry(1, 1.06, 56).rotateX(-Math.PI / 2);
-const ringGeo = new THREE.RingGeometry(1.1, 1.2, 64).rotateX(-Math.PI / 2);
+const ringGeo = new THREE.RingGeometry(1.15, 1.23, 64).rotateX(-Math.PI / 2);
 const ringMat = new THREE.ShaderMaterial({
   transparent: true, depthWrite: false,
   uniforms: { prog: { value: 0 }, col: { value: new THREE.Color(0xffd43b) } },
@@ -87,6 +88,10 @@ let lanes = [];
 let holes = [], player = null;
 let state = 'menu', mode = 'level', timeLeft = 120, gameTime = 0, totalValue = 1, eatenValue = 0;
 let playerColor = 0x7b5cff, playerName = '鸭鸭';
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { } } };
+let wallet = store.get('bh_wallet', 0), owned = new Set(store.get('bh_skins_owned', ['default'])), equipped = store.get('bh_skin', 'default'), runCoins = 0;
+if (!owned.has(equipped)) equipped = 'default';
+const curSkin = () => skinById(equipped);
 let combo = 0, comboT = 0, comboBest = 0, rushT = 0, rushDone = false;
 let sea = null;
 let curLevel = 1, lv = null, lvFitK = 1, coins = [], lvCleared = false;
@@ -152,7 +157,7 @@ function buildCity(def) {
   // 叠叠楼
   for (const st of city.stacks) {
     const S = TYPES.groups.segs[st.k];
-    const stack = { k: st.k, x: st.x, z: st.z, segs: [], baseY: 0, vy: 0, fr: S.a.fr, fade: 1, eatenCount: 0 };
+    const stack = { k: st.k, x: st.x, z: st.z, segs: [], baseY: 0, vy: 0, fr: S.a.fr, fade: 1, eatenCount: 0, ts: 0, lx: 0, lz: 0, vlx: 0, vlz: 0, ot: 0, s: 0, vs: 0, bend: 0, hw: { S: 2.2, M: 3.2, L: 4.5 }[st.k], near: null, nearD: 1e9, u: [] };
     for (let i = 0; i < st.n; i++) {
       const top = i === st.n - 1, t = top ? S.roof : (i % 2 ? S.b : S.a);
       const o = mk(t, st.x, st.z, st.yaw + (i % 3 === 2 ? 0.08 : 0), i % 2 ? st.c2 : st.c1, false);
@@ -204,7 +209,7 @@ function compact() {
       else { const s = t.fr * 2.1 + 0.3, q = nr++ * 16; br[q] = s; br[q + 1] = 0; br[q + 2] = 0; br[q + 3] = 0; br[q + 4] = 0; br[q + 5] = 1; br[q + 6] = 0; br[q + 7] = 0; br[q + 8] = 0; br[q + 9] = 0; br[q + 10] = s; br[q + 11] = 0; br[q + 12] = cx + 0.15; br[q + 13] = 0.07; br[q + 14] = cz - 0.15; br[q + 15] = 1; }
     }
   }
-  for (const st of stacks) if (st.segs.length && st.baseY < 0.5) { const s = st.fr * 2.1 + Math.min(st.segs.length, 30) * 0.12, off = Math.min(st.segs.length * SEG_H, 60) * 0.05, q = ns++ * 16; bs.fill(0, q, q + 16); bs[q] = s; bs[q + 5] = 1; bs[q + 10] = s; bs[q + 12] = st.x + off; bs[q + 13] = 0.075; bs[q + 14] = st.z - off; bs[q + 15] = 1; }
+  for (const st of stacks) if (st.segs.length && st.ts === 0) { const s = st.fr * 2.1 + Math.min(st.segs.length, 30) * 0.12, off = Math.min(st.segs.length * SEG_H, 60) * 0.05, q = ns++ * 16; bs.fill(0, q, q + 16); bs[q] = s; bs[q + 5] = 1; bs[q + 10] = s; bs[q + 12] = st.x + off; bs[q + 13] = 0.075; bs[q + 14] = st.z - off; bs[q + 15] = 1; }
   blobRd.count = nr; blobSq.count = ns; blobRd.instanceMatrix.needsUpdate = true; blobSq.instanceMatrix.needsUpdate = true;
   visTris = 0; visCalls = 2;
   for (const m of typeMesh) if (m && m.count) { m.instanceMatrix.needsUpdate = true; m.instanceColor.needsUpdate = true; m.fadeAttr.needsUpdate = true; visTris += m.count * m.geometry.attributes.position.count / 3; visCalls++; }
@@ -248,7 +253,9 @@ class Hole {
     this.group = new THREE.Group();
     this.mask = new THREE.Mesh(maskGeo, maskMat); this.mask.renderOrder = -10; this.mask.position.y = 0.09;
     this.pit = new THREE.Group(); this.pit.add(new THREE.Mesh(pitGeo, pitMat), new THREE.Mesh(bottomGeo, bottomMat));
-    this.rim = new THREE.Mesh(rimGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 })); this.rim.position.y = 0.1;
+    if (isPlayer) { const sk = curSkin(); this.rim = new THREE.Mesh(skinRimGeo, skinMaterial(sk, color)); this.skinFx = new SkinFx(sk, this.group); }
+    else this.rim = new THREE.Mesh(rimGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95 }));
+    this.rim.position.y = 0.1; this.rim.renderOrder = 1;
     this.group.add(this.mask, this.pit, this.rim);
     if (isPlayer) { this.ring = new THREE.Mesh(ringGeo, ringMat); this.ring.position.y = 0.11; this.ring.renderOrder = 2; this.group.add(this.ring); }
     scene.add(this.group);
@@ -256,7 +263,7 @@ class Hole {
     $('labels').appendChild(this.label); this.setLabel(false);
   }
   setLabel(crown) { this.label.innerHTML = (crown ? '<span class="crown">👑</span>' : '') + escapeHtml(this.name); this._crown = crown; }
-  dispose() { scene.remove(this.group); this.label.remove(); this.rim.material.dispose(); }
+  dispose() { scene.remove(this.group); this.label.remove(); if (this.skinFx) this.skinFx.dispose(); else this.rim.material.dispose(); }
   resetSize() { this.level = 1; this.mass = 0; this.r = 0.2; this.rTarget = radiusFor(1); }
   addMass(v) {
     this.mass += v; let up = false;
@@ -280,15 +287,16 @@ function randomSpawn(h) {
 function interact(h, o) {
   const dx = o.x - h.x, dz = o.z - h.z, fr = o.t.fr, reach = h.r + fr;
   const d2 = dx * dx + dz * dz; if (d2 > reach * reach) return;
-  if (o.stack && o.y > SEG_H * 0.6) return; // 尚未落地的楼层
   const d = Math.sqrt(d2), R = h.r;
+  if (o.stack) { const st = o.stack; if (!st.near || d - R < st.nearD) { st.near = h; st.nearD = d - R; } return; }
+  const plugged = h.blockedBy || h.plug;
   const nx = d > 1e-3 ? -dx / d : 1, nz = d > 1e-3 ? -dz / d : 0;
   if (fr < R * 0.92) {
-    if (d < Math.max(R - fr * 0.4, R * 0.3)) { startFall(o, h); return; }
-    if (o.stack) return;
+    if (!plugged && d < Math.max(R - fr * 0.4, R * 0.3)) { startFall(o, h); return; }
+    if (o.bt) return; // 躺倒的楼层
     const k = Math.min(1, Math.max(0, (R + fr * 0.35 - d) / (fr * 0.75 + 0.01)));
-    disturb(o, nz, -nx, k * 0.55, -k * fr * 0.18);
-  } else if (!o.stack) {
+    disturb(o, nz, -nx, k * (plugged ? 0.25 : 0.55), -k * fr * (plugged ? 0.05 : 0.18));
+  } else if (!o.bt) {
     const over = 1 - d / reach;
     disturb(o, nz, -nx, over * 0.09 * (0.6 + 0.4 * Math.sin(gameTime * 22 + o.id)), 0);
   }
@@ -297,25 +305,151 @@ function disturb(o, ax, az, tilt, y) { if (tilt > o.tt) { o.tt = tilt; o.ty = y;
 function startFall(o, h) {
   gridRemove(o); disturbed.delete(o);
   if (o.mover && o.mover.kind === 'car') { const c = o.mover.lane.cars, k = c.indexOf(o); if (k >= 0) c.splice(k, 1); }
-  o.state = 1; o.hole = h; o.rx = o.x - h.x; o.rz = o.z - h.z; o.rvx = 0; o.rvz = 0; o.vy = 0; o.y = Math.min(o.y, 0);
-  o.spin = (Math.random() - 0.5) * 2;
-  if (o.stack) {
-    const st = o.stack; st.segs.shift(); o.vy = Math.min(0, st.vy) - 2; o.spin *= 0.3;
-    if (st.segs.length) { st.baseY = SEG_H * 0.55; gridAdd(st.segs[0]); if (st.vy > -6) st.vy = -6; }
-    st.eatenCount++; o.segIdx = st.eatenCount;
-  }
+  o.state = 1; o.hole = h; o.rx = o.x - h.x; o.rz = o.z - h.z; o.rvx = 0; o.rvz = 0; o.vy = 0;
+  if (!o.bt) o.y = Math.min(o.y, 0); o.bt = 0; o.by = 0;
+  o.spin = (Math.random() - 0.5) * (o.segIdx ? 0.6 : 2);
+  // 大楼：慢慢沉下去，期间堵住洞口
+  o.slow = o.t.cat === 'bld' && o.t.h > 7 && o.t.fr > h.r * 0.45; if (o.slow) { o.spin *= 0.2; o.vy = -0.5; }
   falling.push(o);
 }
+
+// ---------------- 叠叠楼物理（站立→晃动/倾斜→慢慢下沉 / 倾倒→横跨洞口堵住→滑入 / 散落）----------------
+const T_STAND = 0, T_SINK = 1, T_TOPPLE = 2, T_BLOCK = 3, T_SLIDE = 4;
+function towerSegPose(st) {
+  // 根据状态把各楼层摆好
+  const n = st.segs.length;
+  if (st.ts === T_STAND || st.ts === T_SINK) {
+    const L = Math.hypot(st.lx, st.lz), dx = L > 1e-4 ? st.lx / L : 1, dz = L > 1e-4 ? st.lz / L : 0;
+    const off = st.ts === T_SINK ? -st.s : 0;
+    let px = st.x, py = off, pz = st.z;
+    for (let i = 0; i < n; i++) {
+      const o = st.segs[i], phi = L * (1 + i * st.bend);
+      o.x = px; o.y = py; o.z = pz; o.tilt = phi; o.ax = dz; o.az = -dx; writeMatrix(o);
+      const sp = Math.sin(phi) * SEG_H, cp = Math.cos(phi) * SEG_H; px += dx * sp; pz += dz * sp; py += cp;
+    }
+  } else if (st.ts === T_TOPPLE) {
+    const dx = st.dx, dz = st.dz; let px = st.x, pz = st.z, py = st.hw * Math.sin(Math.min(st.phi, Math.PI / 2)) * 0.98;
+    for (let i = 0; i < n; i++) {
+      const o = st.segs[i], phi = Math.min(Math.PI / 2 + 0.06, st.phi + st.kink * i / Math.max(1, n));
+      o.x = px; o.y = py; o.z = pz; o.tilt = phi; o.ax = dz; o.az = -dx; writeMatrix(o);
+      px += dx * Math.sin(phi) * SEG_H; pz += dz * Math.sin(phi) * SEG_H; py = Math.max(st.hw * 0.98, py + Math.cos(phi) * SEG_H);
+    }
+  } else {
+    const dx = st.dx, dz = st.dz, rock = st.ts === T_BLOCK ? 0.05 * Math.sin(gameTime * 7) * (1 + Math.min(2, st.wig * 0.1)) : 0;
+    for (let i = 0; i < n; i++) {
+      const o = st.segs[i], u = st.u[i]; o.x = st.x + dx * u; o.z = st.z + dz * u;
+      o.y = st.hw * 0.98 + (st.ts === T_BLOCK ? 0.25 + Math.abs(rock) * 4 * Math.sin((i + 0.5) / n * Math.PI) : 0);
+      o.tilt = Math.PI / 2 + rock * Math.sin(i * 1.7); o.ax = dz; o.az = -dx; writeMatrix(o);
+    }
+  }
+}
+function holeOnLine(st, h) {
+  const rx = h.x - st.x, rz = h.z - st.z, t = rx * st.dx + rz * st.dz, e = Math.abs(rx * st.dz - rz * st.dx);
+  const c = e < h.r ? Math.sqrt(h.r * h.r - e * e) : 0; return [t, e, c];
+}
+function towerStartTopple(st, dx, dz, phi, dphi) {
+  const l = Math.hypot(dx, dz) || 1; st.dx = dx / l; st.dz = dz / l; st.phi = Math.max(0.12, phi); st.dphi = dphi; st.kink = 0; st.ts = T_TOPPLE;
+  if (st.s > 0) { st.s = 0; }
+  if (player && Math.hypot(st.x - player.x, st.z - player.z) < 60) { sfx.segment(1); }
+}
+function towerBreak(st) {
+  if (window.__dbgT) console.log('break', st.ts, new Error().stack.split('\n')[2]);
+  // 散落：每层变成躺在地上的独立物体，之后可以再吃
+  gridRemove(st.segs[0]);
+  for (const o of st.segs) {
+    o.stack = null; o.state = 0; o.bt = o.tilt; o.by = o.y; o.yaw += (Math.random() - 0.5) * 0.5; o.x += (Math.random() - 0.5) * 0.8; o.z += (Math.random() - 0.5) * 0.8;
+    if (Math.abs(o.x) > BOUND || Math.abs(o.z) > BOUND) { o.state = 2; continue; }
+    gridAdd(o); writeMatrix(o);
+  }
+  st.segs = [];
+  if (player && Math.hypot(st.x - player.x, st.z - player.z) < 50) { sfx.eat(2.5, 0); vib(30); shake = Math.max(shake, 0.6); }
+}
+function towerEatBottom(st, h) {
+  const o = st.segs.shift(); gridRemove(o); st.eatenCount++; o.segIdx = st.eatenCount; o.state = 2; eaten(o, h); o.stack = null;
+  if (st.segs.length) { const b = st.segs[0]; b.x = st.x; b.z = st.z; gridAdd(b); }
+}
+function towerDetach(st, i, h) {
+  const o = st.segs[i]; if (i === 0) gridRemove(o); st.segs.splice(i, 1); st.u.splice(i, 1);
+  st.eatenCount++; o.segIdx = st.eatenCount; o.stack = null; o.cell = -1; startFall(o, h); o.tilt = Math.PI / 2; o.vy = -1;
+  if (i === 0 && st.segs.length) gridAdd(st.segs[0]);
+}
 function updateStacks(dt) {
+  for (const h of holes) h.blockedBy = null;
   for (const st of stacks) {
-    if (!st.segs.length || (st.baseY <= 0 && st.vy === 0)) continue;
-    st.vy -= 46 * dt; if (st.vy < -34) st.vy = -34;
-    st.baseY += st.vy * dt;
-    if (st.baseY <= 0) { if (st.vy < -10 && player && Math.hypot(st.x - player.x, st.z - player.z) < 40) sfx.eat(1.5, 0); st.baseY = 0; st.vy = 0; }
-    for (let i = 0; i < st.segs.length; i++) { const o = st.segs[i]; o.y = st.baseY + i * SEG_H; o.yaw = o.yaw; writeMatrix(o); }
+    const n = st.segs.length; if (!n) continue;
+    const h0 = st.near; st.near = null; st.nearD = 1e9;
+    if (st.ts === T_STAND) {
+      let Tx = 0, Tz = 0;
+      if (h0 && h0.alive) {
+        const dx = h0.x - st.x, dz = h0.z - st.z, d = Math.hypot(dx, dz) || 1e-3, ux = dx / d, uz = dz / d, R = h0.r, fr = st.fr;
+        if (fr < R * 0.92) {
+          if (d < Math.max(R - fr * 0.4, R * 0.3) && !h0.blockedBy && !h0.plug) { st.ts = T_SINK; st.hole = h0; st.s = 0; st.vs = 0.6; st.wob = 0.6; sfx.segment(1); }
+          else { const ov = Math.min(1, Math.max(0, (R + fr - d) / (2 * fr))); st.ot += dt * (0.4 + ov); const m = Math.min(0.8, ov * 0.3 + st.ot * 0.22 * (0.4 + ov)); Tx = ux * m; Tz = uz * m; }
+        } else { const w = 0.03 + 0.03 * Math.sin(gameTime * 19 + st.x); Tx = ux * w; Tz = uz * w; st.ot = 0; }
+      } else st.ot = Math.max(0, st.ot - dt * 2);
+      st.vlx += ((Tx - st.lx) * 30 - st.vlx * 5) * dt; st.vlz += ((Tz - st.lz) * 30 - st.vlz * 5) * dt; st.lx += st.vlx * dt; st.lz += st.vlz * dt;
+      st.bend = 0.01;
+      const L = Math.hypot(st.lx, st.lz);
+      if (st.ts === T_STAND && L > 0.6 && n > 1) towerStartTopple(st, st.lx, st.lz, L, Math.hypot(st.vlx, st.vlz));
+      else if (L > 0.001 || st.ts === T_SINK) towerSegPose(st);
+    } else if (st.ts === T_SINK) {
+      const h = st.hole;
+      if (!h.alive) { towerStartTopple(st, st.lx || 1, st.lz, 0.3, 0.5); continue; }
+      // 底座跟着洞走，但受限于洞口
+      st.x += (h.x - st.x) * Math.min(1, dt * 2.5); st.z += (h.z - st.z) * Math.min(1, dt * 2.5);
+      const ox = st.x - h.x, oz = st.z - h.z, od = Math.hypot(ox, oz), lim = Math.max(0, h.r - st.fr * 0.6); if (od > lim) { st.x = h.x + ox / od * lim; st.z = h.z + oz / od * lim; }
+      // 惯性：洞移动时楼顶滞后 → 往反方向倾斜；再加上下沉时的摇晃
+      st.wob = Math.max(0.12, st.wob - dt * 0.3);
+      const small = st.fr < h.r * 0.4, kv = 0.03 / (1 + h.r * 0.08), cl = (v) => Math.max(-0.45, Math.min(0.45, v));
+      const Tx = cl(-h.vx * kv) + Math.sin(gameTime * 5.3 + st.x) * 0.05 * st.wob, Tz = cl(-h.vz * kv) + Math.cos(gameTime * 4.7 + st.z) * 0.05 * st.wob;
+      st.vlx += ((Tx - st.lx) * 22 - st.vlx * 4) * dt; st.vlz += ((Tz - st.lz) * 22 - st.vlz * 4) * dt; st.lx += st.vlx * dt; st.lz += st.vlz * dt;
+      st.bend = 0.02;
+      st.vs = Math.min(st.vs + (4 + h.r * 0.15) * (small ? 3 : 1) * dt, Math.min(small ? 90 : 20, 6 + h.r * (small ? 1.2 : 0.4) + st.eatenCount * 0.5)); st.s += st.vs * dt;
+      while (st.segs.length && st.s > SEG_H + 0.4) { st.s -= SEG_H; towerEatBottom(st, h); if (!small) st.vs *= 0.78; st.wob = Math.min(1.2, st.wob + 0.5); st.vlx += (Math.random() - 0.5) * 0.5; st.vlz += (Math.random() - 0.5) * 0.5; }
+      if (!st.segs.length) continue;
+      const L = Math.hypot(st.lx, st.lz);
+      if (!small && L > 0.75 && st.segs.length > 2) { if (st.s > SEG_H * 0.4) { st.s = 0; towerEatBottom(st, h); if (!st.segs.length) continue; } towerStartTopple(st, st.lx, st.lz, L, 0.6); continue; }
+      towerSegPose(st);
+    } else if (st.ts === T_TOPPLE) {
+      const Lt = n * SEG_H;
+      st.dphi += (45 / (Lt + 8)) * Math.sin(st.phi) * dt; st.phi += st.dphi * dt;
+      st.kink += ((-st.dphi * 0.06) - st.kink) * Math.min(1, dt * 6);
+      if (st.phi >= Math.PI / 2) {
+        st.phi = Math.PI / 2; st.u = st.segs.map((_, i) => i * SEG_H);
+        let best = null, bt = 0, bc = 0;
+        for (const h of holes) { if (!h.alive || st.fr >= h.r * 0.92) continue; const [t, e, c] = holeOnLine(st, h); if (c > st.hw && t + c > 0 && t - c < Lt) { best = h; bt = t; bc = c; break; } }
+        if (player && Math.hypot(st.x - player.x, st.z - player.z) < 60) { shake = Math.max(shake, 0.8); sfx.eat(3, 0); vib(35); }
+        if (best && bt - bc > -st.fr * 0.6 && bt + bc < Lt - SEG_H * 0.5) { st.ts = T_BLOCK; st.hole = best; st.bt = 0; st.wig = 0; st.hv = [best.vx, best.vz]; if (best.isPlayer) { banner('堵住洞口！快晃一晃！'); vib([30, 40, 30]); } }
+        else if (best) { st.ts = T_SLIDE; st.hole = best; st.vs = 2; }
+        else { towerSegPose(st); towerBreak(st); continue; }
+      }
+      towerSegPose(st);
+    } else if (st.ts === T_BLOCK) {
+      const h = st.hole; if (!h.alive) { towerBreak(st); continue; }
+      const Lt = n * SEG_H, [t, e, c] = holeOnLine(st, h);
+      if (c <= st.hw || t + c < 0 || t - c > Lt) { towerBreak(st); continue; }
+      if (t - c < -st.fr * 0.9 || t + c > Lt || st.fr < h.r * 0.5) { st.ts = T_SLIDE; st.vs = 2; continue; }
+      h.blockedBy = st; st.bt += dt;
+      st.wig += Math.hypot(h.vx - st.hv[0], h.vz - st.hv[1]) * 0.05; st.hv[0] = h.vx; st.hv[1] = h.vz;
+      if (st.wig > 6 || st.bt > 4.5) { st.ts = T_SLIDE; st.vs = 1.5; if (h.isPlayer) { banner('楼滑进去啦！'); sfx.segment(3); } }
+      towerSegPose(st);
+    } else if (st.ts === T_SLIDE) {
+      const h = st.hole; if (!h.alive) { towerBreak(st); continue; }
+      const [t, e, c] = holeOnLine(st, h);
+      if (c <= st.hw * 0.8) { towerBreak(st); continue; }
+      h.blockedBy = null;
+      st.vs = Math.min(st.vs + 10 * dt, 7 + h.r * 0.3);
+      for (let i = st.segs.length - 1; i >= 0; i--) {
+        const uc = st.u[i] + SEG_H / 2, g = t - uc;
+        st.u[i] += Math.sign(g) * Math.min(Math.abs(g), st.vs * dt);
+        if (Math.abs(t - st.u[i] - SEG_H / 2) < c * 0.7) { towerSegPose(st); towerDetach(st, i, h); }
+      }
+      if (st.segs.length) towerSegPose(st);
+    }
   }
 }
 function updateFalling(dt) {
+  for (const h of holes) h.plug = false;
   for (let i = falling.length - 1; i >= 0; i--) {
     const o = falling[i], h = o.hole, fr = o.t.fr;
     o.rvx += (-o.rx * 14 - o.rvx * 5) * dt; o.rvz += (-o.rz * 14 - o.rvz * 5) * dt;
@@ -323,9 +457,17 @@ function updateFalling(dt) {
     const dist = Math.hypot(o.rx, o.rz), lim = Math.max(0, h.r - fr * 0.55);
     if (o.y < -0.2 && dist > lim) { const s = lim / dist; o.rx *= s; o.rz *= s; }
     o.x = h.x + o.rx; o.z = h.z + o.rz;
-    o.vy -= (22 + h.r * 4) * dt; o.y += o.vy * dt;
-    if (dist > 0.05) { const ax = o.rz / dist, az = -o.rx / dist, a = Math.min(1, dt * 6); o.ax += (ax - o.ax) * a; o.az += (az - o.az) * a; const l = Math.hypot(o.ax, o.az) || 1; o.ax /= l; o.az /= l; }
-    o.tilt += ((o.stack ? 0.3 : 1.35) - o.tilt) * Math.min(1, dt * 5 / (1 + o.t.h * 0.03));
+    if (o.slow) {
+      // 大楼：缓慢下沉 + 摇晃，沉到一半前堵住洞口
+      o.vy = Math.max(o.vy - (2.2 + h.r * 0.08) * dt, -(2.5 + o.t.h * 0.12 + h.r * 0.05)); o.y += o.vy * dt;
+      if (o.y > -o.t.h * 0.55 && o.t.fr > h.r * 0.45) h.plug = true;
+      const tg = 0.12 + 0.07 * Math.sin(gameTime * 8 + o.id);
+      o.tilt += (tg - o.tilt) * Math.min(1, dt * 4);
+    } else {
+      o.vy -= (22 + h.r * 4) * dt; o.y += o.vy * dt;
+      if (dist > 0.05) { const ax = o.rz / dist, az = -o.rx / dist, a = Math.min(1, dt * 6); o.ax += (ax - o.ax) * a; o.az += (az - o.az) * a; const l = Math.hypot(o.ax, o.az) || 1; o.ax /= l; o.az /= l; }
+      o.tilt += ((o.segIdx ? 1.2 : 1.35) - o.tilt) * Math.min(1, dt * 5 / (1 + o.t.h * 0.03));
+    }
     o.yaw += o.spin * dt;
     if (o.y < -(o.t.h + 1 + fr * 0.5)) { o.state = 2; falling.splice(i, 1); eaten(o, h); continue; }
     writeMatrix(o);
@@ -335,7 +477,7 @@ function comboMult() { return combo >= 40 ? 5 : combo >= 20 ? 3 : combo >= 10 ? 
 const MILESTONES = [[10, '不错！'], [20, '爽吃！'], [40, '停不下来！'], [80, '暴食之王！'], [150, '吞噬天地！']];
 function eaten(o, h) {
   if (o.t.cat === 'coin') {
-    if (h.isPlayer) { const secs = 2 + ((o.id * 7) % 4); timeLeft += secs; popup('+' + secs + '秒', 'time'); sfx.coin(); vib(15); h.score += 50; }
+    if (h.isPlayer) { runCoins++; if (mode === 'level') { const secs = 2 + ((o.id * 7) % 4); timeLeft += secs; popup('+' + secs + '秒 🪙', 'time'); } else popup('+10 🪙', 'time'); sfx.coin(); vib(15); h.score += 50; }
     return;
   }
   h.addMass(o.t.value); eatenValue += o.t.value;
@@ -344,7 +486,7 @@ function eaten(o, h) {
     for (const [n, txt] of MILESTONES) if (combo === n) { banner(txt + ` 连吃×${n}`); sfx.combo(MILESTONES.findIndex(m => m[0] === n) + 1); vib(25); }
     const pts = Math.round(o.t.value * 10 * comboMult() * (rushT > 0 ? 2 : 1) * (o.gold ? 5 : 1));
     h.score += pts; popup(pts, o.gold);
-    if (o.stack) sfx.segment(o.segIdx); else sfx.eat(o.t.fr * 1.3, combo);
+    if (o.segIdx) sfx.segment(o.segIdx); else sfx.eat(o.t.fr * 1.3, combo);
     if (o.gold) { sfx.gold(); vib(20); }
     else if (o.t.cat === 'bld' || o.t.fr > 3) vib(18);
   } else {
@@ -481,12 +623,12 @@ function aiThink(h) {
   let best = null, bs = 0; const R = 12 + h.r * 3, r9 = h.r * 0.9;
   const reach = BOUND - h.r * 0.4 + h.r * 0.6;
   gridQuery(h.x, h.z, R, (o) => {
-    if (o.t.fr >= r9 || Math.abs(o.x) > reach || Math.abs(o.z) > reach) return;
+    if (o.t.fr >= r9 || Math.abs(o.x) > reach || Math.abs(o.z) > reach || (o.stack && o.stack.ts !== 0)) return;
     const d = Math.hypot(o.x - h.x, o.z - h.z); const s = (o.stack ? o.stack.segs.length * o.t.value : o.t.value * (o.gold ? 5 : 1)) / (d + 3) * (0.7 + Math.random() * 0.6);
     if (s > bs) { bs = s; best = o; }
   });
   for (const p of pickups) { const d = Math.hypot(p.x - h.x, p.z - h.z); if (d < 25 && 8 / (d + 3) > bs) { bs = 8 / (d + 3); best = p; } }
-  if (!best && mode === 'level') { let bd = 1e9; for (const o of objs) { if (o.state || o.hidden || o.t.fr >= r9 || (o.stack && o !== o.stack.segs[0])) continue; const d = Math.abs(o.x - h.x) + Math.abs(o.z - h.z); if (d < bd) { bd = d; best = o; } } }
+  if (!best && mode === 'level') { let bd = 1e9; for (const o of objs) { if (o.state || o.hidden || o.t.fr >= r9 || (o.stack && (o !== o.stack.segs[0] || o.stack.ts !== 0))) continue; const d = Math.abs(o.x - h.x) + Math.abs(o.z - h.z); if (d < bd) { bd = d; best = o; } } }
   if (best) { ai.tx = best.x; ai.tz = best.z; ai.mode = 'eat'; return; }
   if (ai.mode !== 'wander' || Math.hypot(ai.tx - h.x, ai.tz - h.z) < 5) { ai.tx = (Math.random() * 2 - 1) * (HALF - 15); ai.tz = (Math.random() * 2 - 1) * (HALF - 15); }
   ai.mode = 'wander';
@@ -530,7 +672,8 @@ function updateHoles(dt) {
     h.mask.scale.set(r, 1, r); h.rim.scale.set(r, 1, r); h.pit.scale.set(r * 0.999, depth, r * 0.999);
     if (h.ring) { h.ring.scale.set(r, 1, r); ringMat.uniforms.prog.value = h.progress(); }
     const fxOn = h.fx.magnet > 0 || h.fx.speed > 0 || h.fx.grow > 0;
-    h.rim.material.opacity = h.prot > 0 ? (Math.sin(gameTime * 18) > 0 ? 0.95 : 0.15) : 0.95;
+    const op = h.prot > 0 ? (Math.sin(gameTime * 18) > 0 ? 0.95 : 0.15) : 0.95;
+    if (h.skinFx) { const u = h.rim.material.uniforms; u.op.value = op / 0.95; u.t.value = gameTime; h.skinFx.update(gameTime, r); } else h.rim.material.opacity = op;
     h.rim.scale.multiplyScalar(fxOn ? 1 + 0.03 * Math.sin(gameTime * 12) : 1);
   }
   if (state !== 'play') return;
@@ -566,7 +709,7 @@ function updateOcclusion(dt) {
     const r = Math.max(h.r, 1), cot = 1 / Math.tan(PITCH);
     const test = (o, top) => { const dz = o.z - h.z; return dz > -o.t.fr * 0.4 && dz < top * cot + o.t.fr * 0.8 && Math.abs(o.x - h.x) < o.t.fr * 0.8 + r * 0.7; };
     gridQuery(h.x, h.z + 25, 60, (o) => { if (o.t.h < 9 || o.state || o.stack) return; if (test(o, o.t.h)) { o.fadeT = 0.35; fading.add(o); } });
-    for (const st of stacks) if (st.segs.length > 2 && Math.abs(st.z - h.z - 20) < 60) { const b = st.segs[0]; if (test(b, st.baseY + st.segs.length * SEG_H)) for (const o of st.segs) { o.fadeT = 0.35; fading.add(o); } }
+    for (const st of stacks) if (st.segs.length > 2 && Math.abs(st.z - h.z - 20) < 60) { const b = st.segs[0]; if (st.ts === 0 && st.ot < 0.05 && test(b, st.segs.length * SEG_H)) for (const o of st.segs) { o.fadeT = 0.35; fading.add(o); } }
   }
   for (const o of fading) {
     const tgt = o.fadeT; o.fadeT = 1;
@@ -649,7 +792,7 @@ function updateHud(dt) {
   // 闯关：剩余不多时，指示最近的未吃物体
   if (mode === 'level') {
     const hint = $('hint'); hintT -= dt;
-    if (hintT <= 0) { hintT = 0.25; hintO = null; if (eatenValue >= totalValue * 0.9) { let bd = 1e9; for (const o of objs) { if (o.state || o.hidden || o.t.cat === 'coin' || (o.stack && o !== o.stack.segs[0])) continue; const d = (o.x - player.x) ** 2 + (o.z - player.z) ** 2; if (d < bd) { bd = d; hintO = o; } } } }
+    if (hintT <= 0) { hintT = 0.25; hintO = null; if (eatenValue >= totalValue * 0.9) { let bd = 1e9; for (const o of objs) { if (o.state || o.hidden || o.t.cat === 'coin' || (o.stack && (o !== o.stack.segs[0] || o.stack.ts !== 0))) continue; const d = (o.x - player.x) ** 2 + (o.z - player.z) ** 2; if (d < bd) { bd = d; hintO = o; } } } }
     if (hintO && hintO.state === 0) {
       _v.set(hintO.x, 0, hintO.z).project(camera); let x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
       const m = 34; x = Math.max(m, Math.min(innerWidth - m, x)); y = Math.max(150, Math.min(innerHeight - 190, y));
@@ -709,7 +852,7 @@ function showLevelSel() {
 function startLevel(i) { curLevel = i; mode = 'level'; $('levelSel').classList.add('hidden'); $('menu').classList.add('hidden'); startGame(); }
 function showMenu() {
   state = 'menu'; paused = false;
-  ['hud', 'over', 'count', 'dead', 'paused', 'seaHud', 'levelSel'].forEach(id => $(id).classList.add('hidden'));
+  ['hud', 'over', 'count', 'dead', 'paused', 'seaHud', 'levelSel', 'shop'].forEach(id => $(id).classList.add('hidden'));
   document.body.classList.remove('lv'); lv = null; $('hint').style.display = 'none'; $('lvModeSub').textContent = `50 关 · 已解锁 ${unlockedUpTo()} 关 · 吃光地图拿三星 · 金币加时`;
   $('joy').classList.add('hidden');
   $('menu').classList.remove('hidden');
@@ -725,10 +868,12 @@ function startGame() {
   $('menu').classList.add('hidden'); $('over').classList.add('hidden'); $('hud').classList.remove('hidden');
   $('joy').classList.toggle('hidden', !isTouch); layoutJoy();
   $('feed').innerHTML = ''; combo = 0; comboT = 0; comboBest = 0; rushT = 0; rushDone = false; sfx.setIntense(false);
-  timeLeft = 120; gameTime = 0; trafficT = 0; puTimer = 1;
+  timeLeft = 120; gameTime = 0; trafficT = 0; puTimer = 1; runCoins = 0;
   if (mode === 'sea') {
     disposeCity(); clearHoles();
-    sea = new SeaWorld({ THREE, scene, camera, renderer, sfx, hemi, sun, readInput, banner, popup: (n, g) => popup(n, g), vib, playerName, playerColor, end: (r) => endGame(r) });
+    const sk = curSkin(), [sc1, sc2] = seaColors(sk);
+    sea = new SeaWorld({ THREE, scene, camera, renderer, sfx, hemi, sun, readInput, banner, popup: (n, g) => popup(n, g), vib, playerName, playerColor: sc1, playerColor2: sc2, end: (r) => endGame(r) });
+    if (sk.p || sk.extra) { sea.fxG = new THREE.Group(); sea.group.add(sea.fxG); sea.skinFx = new SkinFx(sk, sea.fxG); }
     $('cityHud').classList.add('hidden'); $('seaHud').classList.remove('hidden');
     $('modeName').textContent = '海底模式';
   } else {
@@ -802,17 +947,96 @@ function endGame(reason) {
     else $('myRank').innerHTML = `第 <b>${rank}</b> 名 · 得分 <b>${player.score}</b> · 最高连吃 ${comboBest} · 吞掉对手 ${player.kills} 次`;
     $('rankList').innerHTML = sorted.map((h, i) => `<li class="${h.isPlayer ? 'me' : ''}"><span class="r">${medal[i] || i + 1}</span><i style="background:${hex(h.color)}"></i><span>${escapeHtml(h.name)}${h.out && mode === 'battle' ? ' 💀' : ''}</span><b>${h.score}</b></li>`).join('');
   }
+  let earn = runCoins * 10;
+  if (mode === 'level') { const st = starsFor(Math.min(100, eatenValue / totalValue * 100)); earn += st * 15 + (reason === 'clear' ? 20 : 0); }
+  else if (mode === 'sea') { const r = sea.result(); earn += r.pearls * 5 + Math.floor(r.time / 10) * 2; }
+  else if (mode === 'solo') earn += Math.floor(eatenValue / totalValue * 20) * 2;
+  else { const sorted = holes.slice().sort((a, b) => b.score - a.score), rk = sorted.indexOf(player) + 1; earn += rk === 1 ? 40 : rk <= 3 ? 20 : 5; }
+  addWallet(earn); sfx.coin();
+  $('rankList').insertAdjacentHTML('beforeend', `<li class="earn"><span>获得金币</span><b>+${earn} 🪙 <small>（共 ${wallet}）</small></b></li>`);
   try { const best = +localStorage.getItem(bestKey) || 0; if (myScore > best) { localStorage.setItem(bestKey, myScore); $('myRank').innerHTML += '<br>🎉 新纪录！'; } else $('myRank').innerHTML += `<br><small>最佳：${best}</small>`; } catch (e) { }
   setTimeout(() => $('over').classList.remove('hidden'), 900);
 }
 let paused = false;
 function pause(p) { if (state !== 'play' && state !== 'countdown') return; paused = p; $('paused').classList.toggle('hidden', !p); if (p) sfx.stopMusic(); else sfx.startMusic(); }
 
+
+// ---------------- 金币钱包 & 皮肤商店 ----------------
+function addWallet(n) { wallet = Math.max(0, wallet + n); store.set('bh_wallet', wallet); updateWalletUI(); }
+function updateWalletUI() { for (const id of ['wallet', 'shopWallet']) { const e = $(id); if (e) e.textContent = '🪙 ' + wallet; } const s = $('shopBtn'); if (s) s.innerHTML = `🎨 皮肤 · <b>${curSkin().name}</b>`; }
+function seaColors(skin) { if (skin.id === 'default') return [playerColor, playerColor]; const lum = (c) => ((c >> 16) & 255) * 0.3 + ((c >> 8) & 255) * 0.59 + (c & 255) * 0.11; const s = skin.c.slice().sort((a, b) => lum(b) - lum(a)); return [skin.kind === 19 ? skin.c[1] : s[1], s[0]]; }
+let shopSel = equipped, prev = null;
+function openShop() {
+  $('menu').classList.add('hidden'); $('shop').classList.remove('hidden'); shopSel = equipped;
+  buildShopGrid(); selectSkin(shopSel); updateWalletUI();
+  if (!prev) prev = makePreview($('skinPrev'));
+  prev.run = true; prev.loop();
+}
+function closeShop() { $('shop').classList.add('hidden'); $('menu').classList.remove('hidden'); if (prev) prev.run = false; updateWalletUI(); }
+function buildShopGrid() {
+  const g = $('skinGrid'); g.innerHTML = '';
+  SKINS.forEach(s => {
+    const b = document.createElement('button'); b.className = 'skc' + (s.id === shopSel ? ' sel' : '') + (s.id === equipped ? ' eq' : '');
+    const st = s.id === equipped ? '<em class="on">使用中</em>' : owned.has(s.id) ? '<em>已拥有</em>' : `<em class="${wallet >= s.price ? 'can' : ''}">🪙${s.price}</em>`;
+    b.innerHTML = `<i style="background:${s.id === 'default' ? hex(playerColor) : swatch(s)}"><u></u></i><b>${s.name}</b>${st}`;
+    b.onclick = () => { selectSkin(s.id); sfx.init(); sfx.ui && sfx.ui(); };
+    g.appendChild(b);
+  });
+}
+function selectSkin(id) {
+  shopSel = id; const s = skinById(id);
+  [...$('skinGrid').children].forEach((b, i) => b.classList.toggle('sel', SKINS[i].id === id));
+  $('skinName').textContent = s.name; $('skinDesc').textContent = s.desc + (s.price ? ` · 价格 🪙${s.price}` : ' · 免费');
+  const a = $('skinAct');
+  if (id === equipped) { a.textContent = '✔ 使用中'; a.disabled = true; a.className = 'big ok'; }
+  else if (owned.has(id)) { a.textContent = '装备'; a.disabled = false; a.className = 'big'; }
+  else if (wallet >= s.price) { a.textContent = `购买 🪙${s.price}`; a.disabled = false; a.className = 'big buy'; }
+  else { a.textContent = `金币不足（还差 ${s.price - wallet}）`; a.disabled = true; a.className = 'big'; }
+  if (prev) prev.setSkin(s);
+}
+function skinAction() {
+  const s = skinById(shopSel);
+  if (!owned.has(s.id)) { if (wallet < s.price) return; addWallet(-s.price); owned.add(s.id); store.set('bh_skins_owned', [...owned]); sfx.init(); sfx.levelUp(); vib([20, 30, 20]); }
+  else sfx.coin();
+  equipped = s.id; store.set('bh_skin', equipped); buildShopGrid(); selectSkin(s.id); updateWalletUI();
+}
+function makePreview(cv) {
+  const r = new THREE.WebGLRenderer({ canvas: cv, antialias: true, alpha: true, stencil: true });
+  r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+  const sc = new THREE.Scene(), cam = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+  sc.add(new THREE.HemisphereLight(0xffffff, 0x8899aa, 1.6)); const dl = new THREE.DirectionalLight(0xffffff, 1.4); dl.position.set(3, 8, 4); sc.add(dl);
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(5.2, 48).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xc9d3dd, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc })); ground.renderOrder = -5; sc.add(ground);
+  const tiles = new THREE.Mesh(new THREE.RingGeometry(3.4, 5.2, 48).rotateX(-Math.PI / 2).translate(0, 0.01, 0), new THREE.MeshLambertMaterial({ color: 0x9fb4c7, stencilWrite: true, stencilRef: 1, stencilFunc: THREE.NotEqualStencilFunc })); tiles.renderOrder = -4; sc.add(tiles);
+  const g = new THREE.Group(); sc.add(g); const R = 2.4;
+  const mask = new THREE.Mesh(maskGeo, maskMat); mask.renderOrder = -10; mask.position.y = 0.09; mask.scale.set(R, 1, R);
+  const pit = new THREE.Group(); pit.add(new THREE.Mesh(pitGeo, pitMat), new THREE.Mesh(bottomGeo, bottomMat)); pit.scale.set(R, 6, R);
+  const rim = new THREE.Mesh(skinRimGeo, skinMaterial(SKINS[0], playerColor)); rim.position.y = 0.1; rim.scale.set(R, 1, R); rim.renderOrder = 1;
+  g.add(mask, pit, rim);
+  const boxes = []; const bc = [0xff8787, 0x74c0fc, 0xffd43b, 0x69db7c];
+  for (let i = 0; i < 4; i++) { const m = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.7, 0.5), new THREE.MeshLambertMaterial({ color: bc[i] })); m.userData.ph = i / 4; sc.add(m); boxes.push(m); }
+  let fx = null, t0 = performance.now();
+  const P = {
+    run: false,
+    setSkin(s) { rim.material = skinMaterial(s, playerColor); if (fx) fx.dispose(); fx = new SkinFx(s, g); },
+    loop() {
+      if (!P.run) return; requestAnimationFrame(P.loop);
+      const w = cv.clientWidth, h = cv.clientHeight; if (cv.width !== Math.round(w * r.getPixelRatio())) { r.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+      const t = (performance.now() - t0) / 1000;
+      const a = t * 0.35; cam.position.set(Math.sin(a) * 7.2, 5.6, Math.cos(a) * 7.2); cam.lookAt(0, -0.3, 0);
+      rim.material.uniforms.t.value = t; if (fx) fx.update(t, R);
+      for (const b of boxes) { const k = (t * 0.28 + b.userData.ph) % 1, ang = b.userData.ph * 6.28 + k * 3, d = 4.4 * (1 - k * 0.85); b.position.set(Math.cos(ang) * d, k > 0.75 ? -(k - 0.75) * 18 : 0.35, Math.sin(ang) * d); b.rotation.set(k > 0.75 ? (k - 0.75) * 8 : 0, ang, 0); }
+      r.render(sc, cam);
+    }
+  };
+  P.loop = P.loop.bind(P); P.setSkin(SKINS[0]); return P;
+}
+
 (function initUI() {
   try { const n = localStorage.getItem('bh_name'); if (n) $('nameInput').value = n; const c = +localStorage.getItem('bh_color'); if (c) playerColor = c; } catch (e) { }
   const sk = $('skins');
   COLORS.forEach(c => { const b = document.createElement('button'); b.style.setProperty('--c', hex(c)); if (c === playerColor) b.classList.add('active'); b.onclick = () => { playerColor = c; [...sk.children].forEach(x => x.classList.remove('active')); b.classList.add('active'); }; sk.appendChild(b); });
   document.querySelectorAll('.mode').forEach(b => b.onclick = () => { document.querySelectorAll('.mode').forEach(x => x.classList.remove('active')); b.classList.add('active'); mode = b.dataset.mode; });
+  $('shopBtn').onclick = openShop; $('shopBack').onclick = closeShop; $('skinAct').onclick = skinAction; updateWalletUI();
   $('startBtn').onclick = startGame; $('againBtn').onclick = () => mode === 'level' ? startLevel(curLevel) : startGame(); $('homeBtn').onclick = showMenu;
   $('nextBtn').onclick = () => startLevel(Math.min(LEVEL_COUNT, curLevel + 1)); $('selBtn').onclick = () => { showMenu(); showLevelSel(); }; $('lvBack').onclick = showMenu;
   $('muteBtn').onclick = () => { sfx.init(); sfx.setMuted(!sfx.muted); $('muteBtn').textContent = sfx.muted ? '🔇' : '🔊'; };
@@ -843,7 +1067,7 @@ function frame(now) {
     perfAcc = 0; perfN = 0;
   }
   step(dt);
-  if (sea) sea.camera(dt, state); else { updateCamera(dt); updateOcclusion(dt); compact(); }
+  if (sea) { sea.camera(dt, state); if (sea.skinFx) { sea.fxG.position.set(sea.v.x, 0, sea.v.z); sea.skinFx.update(gameTime, sea.v.r); } } else { updateCamera(dt); updateOcclusion(dt); compact(); }
   if (player) { updateHud(dt); flushPop(dt); }
   if (sea && state !== 'menu') { sea.hud(); flushPop(dt); }
   updateLabels();

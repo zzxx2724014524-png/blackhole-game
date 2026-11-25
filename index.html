@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#1b1430">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%23000%22 stroke=%22%237b5cff%22 stroke-width=%223%22/%3E%3C/svg%3E">
 <title>黑洞入侵 · 网页版</title>
-<link rel="stylesheet" href="style.css?v=4">
+<link rel="stylesheet" href="style.css?v=5">
 <script type="importmap">{"imports":{"three":"./lib/three.module.js"}}</script>
 </head>
 <body>
@@ -50,6 +50,7 @@
     <p class="sub">吞噬整座城市，成为最大的黑洞！</p>
     <label class="name">昵称 <input id="nameInput" maxlength="8" value="鸭鸭"></label>
     <div class="skins" id="skins"></div>
+    <div class="walletRow"><span id="wallet" class="coinChip">🪙 0</span><button id="shopBtn" class="shopBtn">🎨 皮肤</button></div>
     <div class="modes">
       <button class="mode active lvmode" data-mode="level"><b>🏆 闯关模式</b><span id="lvModeSub">50 关 · 吃光地图拿三星 · 金币加时</span></button>
       <button class="mode" data-mode="classic"><b>经典模式</b><span>2分钟 · 吃得最多者胜</span></button>
@@ -66,6 +67,16 @@
   <div class="panel lvpanel">
     <div class="lvhead"><button id="lvBack" class="ghost sm">‹ 返回</button><h2>闯关模式</h2><span id="lvStars">★ 0/150</span></div>
     <div id="lvGrid"></div>
+  </div>
+</div>
+<div id="shop" class="screen hidden">
+  <div class="panel shoppanel">
+    <div class="lvhead"><button id="shopBack" class="ghost sm">‹ 返回</button><h2>皮肤商店</h2><span id="shopWallet" class="coinChip">🪙 0</span></div>
+    <canvas id="skinPrev"></canvas>
+    <div class="skinInfo"><b id="skinName">经典</b><span id="skinDesc"></span></div>
+    <button id="skinAct" class="big">装备</button>
+    <div id="skinGrid"></div>
+    <p class="tip">吃金币、过关拿星、赢比赛都能攒金币 🪙</p>
   </div>
 </div>
 <div id="count" class="hidden"></div>
@@ -85,6 +96,6 @@
   </div>
 </div>
 <div id="loading">城市建造中…</div>
-<script type="module" src="js/game.js?v=4"></script>
+<script type="module" src="js/game.js?v=5"></script>
 </body>
 </html>
