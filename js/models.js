@@ -1,590 +1,368 @@
-// 原创低多边形模型：全部由几何体程序化拼合，无外部素材
+// v2 原创可爱风低多边形模型：顶点色 + 实例染色(tint) + 程序生成贴图图集（立面窗户）
 import * as THREE from 'three';
 import { mergeGeometries } from '../lib/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from '../lib/RoundedBoxGeometry.js?v=2';
 
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(),
-  _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
 const PI = Math.PI;
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
+export const TILE = { apt: 0, house: 1, office: 2, tower: 3, store: 4, seg: 5, awning: 6, bus: 7, roof: 8, brick: 9, carwin: 10, sign: 11, seg2: 12, door: 13 };
 
 export class GB {
-  constructor() { this.lists = {}; }
-  add(geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1, list = 'base', uvfn = null) {
+  constructor() { this.parts = []; }
+  // o: {tint:0|1, tile:-1.., cw, ch}
+  add(geo, color, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1, o = {}) {
     let g = geo.index ? geo.toNonIndexed() : geo;
-    _e.set(rx, ry, rz); _q.setFromEuler(_e);
-    _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz));
+    _e.set(rx, ry, rz); _q.setFromEuler(_e); _m.compose(_p.set(x, y, z), _q, _s.set(sx, sy, sz));
     g.applyMatrix4(_m);
-    const n = g.attributes.position.count, col = new Float32Array(n * 3);
+    for (const k of Object.keys(g.attributes)) if (k !== 'position' && k !== 'normal') g.deleteAttribute(k);
+    const n = g.attributes.position.count;
+    const col = new Float32Array(n * 3), tint = new Float32Array(n), tile = new Float32Array(n), uv = new Float32Array(n * 2);
     _c.set(color);
-    for (let i = 0; i < n; i++) { col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; }
-    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
-    if (uvfn) uvfn(g); else if (g.attributes.uv) g.deleteAttribute('uv');
-    (this.lists[list] ||= []).push(g);
-    return this;
-  }
-  box(w, h, d, c, x = 0, y = 0, z = 0, ry = 0, rx = 0, rz = 0) { return this.add(new THREE.BoxGeometry(w, h, d), c, x, y + h / 2, z, rx, ry, rz); }
-  boxC(w, h, d, c, x, y, z, rx = 0, ry = 0, rz = 0) { return this.add(new THREE.BoxGeometry(w, h, d), c, x, y, z, rx, ry, rz); }
-  cyl(rt, rb, h, c, x = 0, y = 0, z = 0, seg = 12) { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y + h / 2, z); }
-  cylC(rt, rb, h, c, x, y, z, rx = 0, ry = 0, rz = 0, seg = 12) { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y, z, rx, ry, rz); }
-  cone(r, h, c, x = 0, y = 0, z = 0, seg = 8, ry = 0) { return this.add(new THREE.ConeGeometry(r, h, seg), c, x, y + h / 2, z, 0, ry, 0); }
-  ico(r, c, x, y, z, sx = 1, sy = 1, sz = 1, detail = 0) { return this.add(new THREE.IcosahedronGeometry(r, detail), c, x, y, z, 0, 0, 0, sx, sy, sz); }
-  sph(r, c, x, y, z, ws = 8, hs = 6) { return this.add(new THREE.SphereGeometry(r, ws, hs), c, x, y, z); }
-  // 带窗户贴图坐标的立面盒子（底部定位，轴对齐）
-  facade(w, h, d, c, x, y, z, cw, ch, list) {
-    const cx = Math.max(1, Math.round(w / cw)), cz = Math.max(1, Math.round(d / cw));
-    const rows = Math.max(1, Math.round(h / ch));
-    const cwx = w / cx, cwz = d / cz, chh = h / rows, x0 = x - w / 2, z0 = z - d / 2, y0 = y;
-    return this.add(new THREE.BoxGeometry(w, h, d), c, x, y + h / 2, z, 0, 0, 0, 1, 1, 1, list, (g) => {
-      const P = g.attributes.position, N = g.attributes.normal, uv = new Float32Array(P.count * 2);
-      for (let i = 0; i < P.count; i++) {
+    for (let i = 0; i < n; i++) { col[i * 3] = _c.r; col[i * 3 + 1] = _c.g; col[i * 3 + 2] = _c.b; tint[i] = o.tint ? 1 : 0; tile[i] = -1; }
+    if (o.tile !== undefined && o.tile >= 0) {
+      g.computeBoundingBox(); const b = g.boundingBox;
+      const w = b.max.x - b.min.x, h = b.max.y - b.min.y, d = b.max.z - b.min.z;
+      const cw = o.cw || 3, ch = o.ch || 3;
+      const cx = Math.max(1, Math.round(w / cw)), cz = Math.max(1, Math.round(d / cw)), cy = Math.max(1, Math.round(h / ch));
+      const P = g.attributes.position, N = g.attributes.normal;
+      for (let i = 0; i < n; i++) {
         const nx = N.getX(i), ny = N.getY(i);
-        let u, v;
-        if (Math.abs(ny) > 0.5) { u = 0.02; v = 0.02; }
-        else if (Math.abs(nx) > 0.5) { u = (P.getZ(i) - z0) / cwz; v = (P.getY(i) - y0) / chh; }
-        else { u = (P.getX(i) - x0) / cwx; v = (P.getY(i) - y0) / chh; }
+        if (Math.abs(ny) > 0.5) continue;
+        tile[i] = o.tile;
+        const v = (P.getY(i) - b.min.y) / h * cy;
+        const u = Math.abs(nx) > 0.5 ? (P.getZ(i) - b.min.z) / d * cz : (P.getX(i) - b.min.x) / w * cx;
         uv[i * 2] = u; uv[i * 2 + 1] = v;
       }
-      g.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
-    });
-  }
-  build() {
-    const out = {};
-    for (const k in this.lists) if (this.lists[k].length) {
-      const g = mergeGeometries(this.lists[k]);
-      g.computeBoundingBox(); g.computeBoundingSphere();
-      out[k] = g;
     }
-    return out;
+    g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    g.setAttribute('tint', new THREE.BufferAttribute(tint, 1));
+    g.setAttribute('tile', new THREE.BufferAttribute(tile, 1));
+    g.setAttribute('auv', new THREE.BufferAttribute(uv, 2));
+    this.parts.push(g); return this;
   }
+  box(w, h, d, c, x = 0, y = 0, z = 0, o, ry = 0, rx = 0, rz = 0) { return this.add(new THREE.BoxGeometry(w, h, d), c, x, y + h / 2, z, rx, ry, rz, 1, 1, 1, o); }
+  rbox(w, h, d, r, c, x = 0, y = 0, z = 0, o, ry = 0) { return this.add(new RoundedBoxGeometry(w, h, d, 1, r), c, x, y + h / 2, z, 0, ry, 0, 1, 1, 1, o); }
+  cyl(rt, rb, h, c, x = 0, y = 0, z = 0, seg = 8, o) { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y + h / 2, z, 0, 0, 0, 1, 1, 1, o); }
+  cylC(rt, rb, h, c, x, y, z, rx, ry, rz, seg = 8, o) { return this.add(new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y, z, rx, ry, rz, 1, 1, 1, o); }
+  cone(r, h, c, x = 0, y = 0, z = 0, seg = 7, ry = 0, o) { return this.add(new THREE.ConeGeometry(r, h, seg), c, x, y + h / 2, z, 0, ry, 0, 1, 1, 1, o); }
+  ico(r, c, x, y, z, sx = 1, sy = 1, sz = 1, o) { return this.add(new THREE.IcosahedronGeometry(r, 0), c, x, y, z, 0, 0, 0, sx, sy, sz, o); }
+  sph(r, c, x, y, z, ws = 8, hs = 6, sy = 1, o) { return this.add(new THREE.SphereGeometry(r, ws, hs), c, x, y, z, 0, 0, 0, 1, sy, 1, o); }
+  build() { const g = mergeGeometries(this.parts); g.computeBoundingBox(); g.computeBoundingSphere(); return g; }
 }
 
-// ---------- 窗户贴图 ----------
-function windowTex(kind) {
-  const S = 64, cv = document.createElement('canvas'); cv.width = cv.height = S;
+// ---------- 图集 512x512, 4x4 格 ----------
+function makeAtlas() {
+  const S = 512, C = 128, cv = document.createElement('canvas'); cv.width = cv.height = S;
   const x = cv.getContext('2d');
-  x.fillStyle = '#ffffff'; x.fillRect(0, 0, S, S);
-  const glass = (x0, y0, w, h) => {
-    const gr = x.createLinearGradient(x0, y0, x0 + w, y0 + h);
-    gr.addColorStop(0, '#5f86ad'); gr.addColorStop(0.45, '#2c4766'); gr.addColorStop(1, '#3f6189');
-    x.fillStyle = gr; x.fillRect(x0, y0, w, h);
-    x.fillStyle = 'rgba(255,255,255,0.22)';
-    x.beginPath(); x.moveTo(x0, y0 + h * 0.55); x.lineTo(x0 + w * 0.5, y0); x.lineTo(x0 + w * 0.7, y0); x.lineTo(x0, y0 + h * 0.85); x.fill();
+  x.fillStyle = '#fff'; x.fillRect(0, 0, S, S);
+  const cell = (t, fn) => { const col = t % 4, row = (t / 4) | 0; x.save(); x.translate(col * C, (3 - row) * C); x.beginPath(); x.rect(0, 0, C, C); x.clip(); fn(); x.restore(); };
+  const rr = (X, Y, W, H, R, fill) => { x.fillStyle = fill; x.beginPath(); x.roundRect(X, Y, W, H, R); x.fill(); };
+  const glass = (X, Y, W, H, R = 6, a = '#bfe6ff', b = '#5a8fc7') => {
+    const g = x.createLinearGradient(X, Y, X + W * 0.3, Y + H); g.addColorStop(0, a); g.addColorStop(1, b);
+    rr(X, Y, W, H, R, g);
+    x.fillStyle = 'rgba(255,255,255,.45)'; x.beginPath(); x.moveTo(X + W * 0.15, Y + H * 0.9); x.lineTo(X + W * 0.55, Y + H * 0.1); x.lineTo(X + W * 0.72, Y + H * 0.1); x.lineTo(X + W * 0.32, Y + H * 0.9); x.fill();
   };
-  if (kind === 'apt') {
-    x.fillStyle = '#e9e9e9'; x.fillRect(14, 10, 36, 36);
-    glass(17, 13, 30, 30);
-    x.fillStyle = '#e9e9e9'; x.fillRect(31, 13, 2, 30);
-    x.fillStyle = '#c8c8c8'; x.fillRect(12, 46, 40, 4);
-  } else if (kind === 'house') {
-    x.fillStyle = '#f4f4f4'; x.fillRect(18, 14, 28, 32);
-    glass(20, 16, 24, 28);
-    x.fillStyle = '#f4f4f4'; x.fillRect(31, 16, 2, 28); x.fillRect(20, 29, 24, 2);
-    x.fillStyle = '#9a9a9a'; x.fillRect(11, 14, 6, 32); x.fillRect(47, 14, 6, 32);
-  } else if (kind === 'office') {
-    glass(0, 0, 64, 44);
-    x.fillStyle = '#ffffff'; x.fillRect(0, 0, 3, 64); x.fillRect(61, 0, 3, 64); x.fillRect(31, 0, 2, 44);
-    x.fillStyle = '#d3dae2'; x.fillRect(0, 44, 64, 20);
-  } else if (kind === 'tower') {
-    glass(0, 0, 64, 58);
-    x.fillStyle = '#ffffff'; x.fillRect(0, 0, 2, 64); x.fillRect(62, 0, 2, 64); x.fillRect(21, 0, 1, 58); x.fillRect(42, 0, 1, 58);
-    x.fillStyle = '#c4ccd6'; x.fillRect(0, 58, 64, 6);
-  } else if (kind === 'store') {
-    glass(2, 6, 60, 58);
-    x.fillStyle = '#ffffff'; x.fillRect(30, 6, 3, 58);
-  }
-  const t = new THREE.CanvasTexture(cv);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.colorSpace = THREE.SRGBColorSpace;
-  t.anisotropy = 4; t.generateMipmaps = true;
-  return t;
+  cell(TILE.apt, () => { rr(26, 18, 76, 80, 10, '#ffffff'); glass(32, 24, 64, 66, 8); x.fillStyle = '#fff'; x.fillRect(62, 24, 4, 66); rr(20, 96, 88, 12, 5, '#e8e2da'); x.fillStyle = '#ff9fb2'; for (let i = 0; i < 5; i++) { x.beginPath(); x.arc(32 + i * 16, 94, 6, 0, 7); x.fill(); } });
+  cell(TILE.house, () => { rr(34, 26, 60, 70, 8, '#ffffff'); glass(40, 32, 48, 58, 6); x.fillStyle = '#fff'; x.fillRect(62, 32, 4, 58); x.fillRect(40, 59, 48, 4); rr(16, 26, 16, 70, 4, '#d5cfc6'); rr(96, 26, 16, 70, 4, '#d5cfc6'); });
+  cell(TILE.office, () => { glass(4, 4, 120, 88, 3, '#c9ecff', '#4f86c6'); x.fillStyle = '#fff'; x.fillRect(62, 4, 4, 88); rr(0, 96, 128, 32, 0, '#e9eef3'); });
+  cell(TILE.tower, () => { glass(3, 0, 122, 116, 2, '#d4f1ff', '#3f78b8'); x.fillStyle = '#fff'; for (const X of [0, 42, 84, 125]) x.fillRect(X, 0, 3, 116); x.fillStyle = '#e3e9ef'; x.fillRect(0, 116, 128, 12); });
+  cell(TILE.store, () => { glass(6, 20, 116, 104, 4, '#e1f5ff', '#7fb3dd'); x.fillStyle = '#fff'; x.fillRect(62, 20, 4, 104); rr(0, 0, 128, 16, 0, '#ffffff'); });
+  cell(TILE.seg, () => { rr(0, 0, 128, 14, 0, '#ffffff'); glass(14, 26, 44, 60, 8); glass(70, 26, 44, 60, 8); rr(4, 92, 120, 8, 4, '#ffffff'); for (let i = 0; i < 10; i++) x.fillRect(8 + i * 12, 100, 4, 18); rr(4, 116, 120, 6, 3, '#ffffff'); });
+  cell(TILE.seg2, () => { rr(0, 0, 128, 12, 0, '#ffffff'); glass(10, 24, 108, 50, 10, '#ffe6f0', '#d07aa0'); x.fillStyle = '#fff'; x.fillRect(46, 24, 4, 50); x.fillRect(80, 24, 4, 50); rr(0, 84, 128, 44, 0, '#f2efe9'); x.fillStyle = '#e0dbd3'; for (let i = 0; i < 4; i++) x.fillRect(0, 92 + i * 9, 128, 2); });
+  cell(TILE.awning, () => { for (let i = 0; i < 8; i++) { x.fillStyle = i % 2 ? '#ffffff' : '#ff6b6b'; x.fillRect(i * 16, 0, 16, 128); } x.fillStyle = 'rgba(0,0,0,.08)'; x.fillRect(0, 110, 128, 18); });
+  cell(TILE.bus, () => { rr(0, 0, 128, 128, 0, '#ffffff'); glass(6, 10, 52, 70, 8, '#d8f0ff', '#2f4f73'); glass(70, 10, 52, 70, 8, '#d8f0ff', '#2f4f73'); });
+  cell(TILE.roof, () => { for (let r = 0; r < 8; r++) for (let c = -1; c < 9; c++) rr(c * 16 + (r % 2) * 8, r * 16, 15, 15, 5, r % 2 ? '#f2f2f2' : '#dcdcdc'); });
+  cell(TILE.brick, () => { x.fillStyle = '#ececec'; x.fillRect(0, 0, 128, 128); x.fillStyle = '#ffffff'; for (let r = 0; r < 12; r++) for (let c = -1; c < 6; c++) x.fillRect(c * 24 + (r % 2) * 12 + 1, r * 11 + 1, 22, 9); rr(30, 22, 68, 76, 8, '#fff'); glass(36, 28, 56, 64, 6); });
+  cell(TILE.carwin, () => { glass(0, 0, 128, 128, 0, '#cfe9ff', '#2c4a6e'); });
+  cell(TILE.sign, () => { rr(0, 0, 128, 128, 0, '#ffffff'); const cs = ['#ff6b6b', '#ffd43b', '#4dabf7', '#69db7c']; for (let i = 0; i < 4; i++) { x.fillStyle = cs[i]; x.beginPath(); x.arc(20 + i * 29, 64, 12, 0, 7); x.fill(); } });
+  cell(TILE.door, () => { rr(0, 0, 128, 128, 0, '#ffffff'); rr(36, 30, 56, 98, 10, '#a0785a'); x.fillStyle = '#ffd43b'; x.beginPath(); x.arc(80, 82, 5, 0, 7); x.fill(); });
+  const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 2;
+  t.minFilter = THREE.LinearMipmapLinearFilter; return t;
 }
 
-// 遮挡淡出：每实例 iFade 属性 + 有序抖动（无需排序的半透明）
-function addFade(mat) {
+export function makeMaterial() {
+  const atlas = makeAtlas();
+  const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
   mat.onBeforeCompile = (sh) => {
-    sh.vertexShader = 'attribute float iFade;\nvarying float vFade;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvFade = iFade;');
-    sh.fragmentShader = 'varying float vFade;\n' + sh.fragmentShader.replace('void main() {', `void main() {
-      if (vFade < 0.99) {
-        vec2 p = mod(floor(gl_FragCoord.xy), 4.0);
-        vec2 a = mod(p, 2.0), b = floor(p / 2.0);
-        float th = (4.0 * mod(2.0 * a.x + 3.0 * a.y, 4.0) + mod(2.0 * b.x + 3.0 * b.y, 4.0) + 0.5) / 16.0;
-        if (vFade < th) discard;
-      }`);
+    sh.uniforms.atlas = { value: atlas };
+    sh.vertexShader = 'attribute float tint;\nattribute float tile;\nattribute vec2 auv;\nattribute float iFade;\nvarying float vTile;\nvarying vec2 vAuv;\nvarying float vFade;\n' +
+      sh.vertexShader.replace('#include <color_vertex>', `#include <color_vertex>
+      #ifdef USE_INSTANCING_COLOR
+        vColor.xyz = color.xyz * mix(vec3(1.0), instanceColor.xyz, tint);
+      #endif
+      vTile = tile; vAuv = auv; vFade = iFade;`);
+    sh.fragmentShader = 'uniform sampler2D atlas;\nvarying float vTile;\nvarying vec2 vAuv;\nvarying float vFade;\n' +
+      sh.fragmentShader.replace('void main() {', `void main() {
+        if (vFade < 0.99) {
+          vec2 p = mod(floor(gl_FragCoord.xy), 4.0); vec2 a = mod(p, 2.0), b = floor(p / 2.0);
+          float th = (4.0 * mod(2.0 * a.x + 3.0 * a.y, 4.0) + mod(2.0 * b.x + 3.0 * b.y, 4.0) + 0.5) / 16.0;
+          if (vFade < th) discard;
+        }`).replace('#include <color_fragment>', `#include <color_fragment>
+        if (vTile > -0.5) {
+          float t = floor(vTile + 0.5); vec2 cell = vec2(mod(t, 4.0), floor(t / 4.0));
+          vec2 f = fract(vAuv);
+          vec2 auv = (cell + 0.03 + f * 0.94) * 0.25;
+          diffuseColor.rgb *= textureGrad(atlas, auv, dFdx(vAuv) * 0.235, dFdy(vAuv) * 0.235).rgb;
+        }`);
   };
-  mat.customProgramCacheKey = () => 'fade';
+  mat.customProgramCacheKey = () => 'bh2';
   return mat;
 }
-export function makeMaterials() {
-  const base = addFade(new THREE.MeshLambertMaterial({ vertexColors: true }));
-  const fac = {};
-  for (const k of ['apt', 'house', 'office', 'tower', 'store']) fac[k] = addFade(new THREE.MeshLambertMaterial({ vertexColors: true, map: windowTex(k) }));
-  return { base, fac };
+
+// ---------- 调色板 ----------
+export const PAL = {
+  car: [0xff6b6b, 0x4dabf7, 0xffd43b, 0x69db7c, 0xb197fc, 0xff922b, 0xf8f9fa, 0xff8cc6, 0x3bc9db],
+  shirt: [0xff6b6b, 0x4dabf7, 0xffd43b, 0x69db7c, 0xb197fc, 0xff922b, 0xffffff, 0xff8cc6, 0x20c997],
+  wall: [0xffe3e3, 0xfff3bf, 0xd3f9d8, 0xd0ebff, 0xe5dbff, 0xffe8cc, 0xf8f9fa, 0xc5f6fa, 0xffdeeb],
+  glass: [0xa5d8ff, 0x99e9f2, 0xb2f2bb, 0xd0bfff, 0xffd8a8, 0xbac8ff],
+  seg: [0xff8787, 0xffa94d, 0xffd43b, 0x8ce99a, 0x66d9e8, 0x74c0fc, 0xb197fc, 0xf783ac, 0xffc9c9, 0x96f2d7],
+  leaf: [0x69db7c, 0x51cf66, 0x8ce99a, 0x94d82d, 0x40c057],
+  awn: [0xff6b6b, 0x4dabf7, 0x69db7c, 0xffa94d, 0xb197fc],
+  white: [0xffffff],
+};
+const GL = 0x3b5b7e, TIRE = 0x343a40, WHITE = 0xffffff, GREY = 0xadb5bd, DGREY = 0x495057;
+const T1 = { tint: 1 };
+
+// ---------- 车辆 ----------
+function wheels(g, xs, zs, r = 0.42, w = 0.34) {
+  for (const sx of [-1, 1]) for (const z of zs) { g.cylC(r, r, w, TIRE, sx * xs, r, z, 0, 0, PI / 2, 10); g.cylC(r * 0.5, r * 0.5, w + 0.04, 0xe9ecef, sx * xs, r, z, 0, 0, PI / 2, 6); }
 }
-
-// ---------- 模型 ----------
-const WHEEL = 0x1d1d22, HUB = 0xc9ccd1, GLASS = 0x22364c, DARK = 0x33363c;
-
-function wheels(g, xs, zs, r = 0.34, w = 0.26) {
-  for (const sx of [-1, 1]) for (const z of zs) {
-    g.cylC(r, r, w, WHEEL, sx * xs, r, z, 0, 0, PI / 2, 12);
-    g.cylC(r * 0.58, r * 0.58, w + 0.02, HUB, sx * xs, r, z, 0, 0, PI / 2, 8);
-  }
-}
-
-function sedan(color, extra) {
-  const g = new GB(), W = 1.7, L = 3.9;
-  wheels(g, 0.78, [-1.22, 1.22]);
-  g.box(W * 0.96, 0.14, L * 0.96, 0x2a2a30, 0, 0.18, 0);
-  g.box(W, 0.48, L, color, 0, 0.3, 0);
-  g.boxC(W * 0.94, 0.1, 1.05, color, 0, 0.8, 1.3, -0.1, 0, 0); // 引擎盖
-  g.box(1.5, 0.5, 1.95, GLASS, 0, 0.76, -0.25);
-  g.box(1.52, 0.07, 1.6, color, 0, 1.25, -0.3);
-  g.box(1.54, 0.48, 0.14, color, 0, 0.78, -0.2);   // B柱
-  g.box(1.54, 0.48, 0.12, color, 0, 0.78, -1.2);
-  g.box(W + 0.04, 0.2, 0.16, 0x3a3a40, 0, 0.26, L / 2);
-  g.box(W + 0.04, 0.2, 0.16, 0x3a3a40, 0, 0.26, -L / 2);
-  for (const s of [-1, 1]) {
-    g.box(0.36, 0.14, 0.06, 0xfff3c0, s * 0.56, 0.56, L / 2 + 0.01);
-    g.box(0.36, 0.12, 0.06, 0xe0302a, s * 0.56, 0.58, -L / 2 - 0.01);
-    g.box(0.12, 0.1, 0.2, color, s * (W / 2 + 0.06), 0.82, 0.55);
-  }
-  g.box(0.7, 0.14, 0.05, 0x1f1f22, 0, 0.4, L / 2 + 0.06);
-  if (extra) extra(g);
+function car() {
+  const g = new GB();
+  wheels(g, 0.78, [-1.05, 1.05]);
+  g.rbox(1.8, 0.75, 3.4, 0.28, WHITE, 0, 0.3, 0, T1);
+  g.rbox(1.5, 0.66, 1.75, 0.22, WHITE, 0, 0.95, -0.2, { tile: TILE.carwin, cw: 2, ch: 1 });
+  g.rbox(1.56, 0.14, 1.7, 0.06, WHITE, 0, 1.56, -0.2, T1);
+  for (const s of [-1, 1]) { g.sph(0.16, 0xfff3bf, s * 0.55, 0.78, 1.66, 6, 4); g.box(0.3, 0.14, 0.06, 0xff4d4d, s * 0.58, 0.78, -1.72); }
+  g.box(0.8, 0.12, 0.08, DGREY, 0, 0.45, 1.72);
   return g;
 }
 function taxi() {
-  return sedan(0xf5c518, (g) => {
-    g.box(0.7, 0.24, 0.32, 0xffffff, 0, 1.32, -0.3);
-    g.box(0.72, 0.06, 0.34, 0xe0302a, 0, 1.32, -0.3);
-    g.box(1.72, 0.12, 3.2, 0x222222, 0, 0.52, 0); // 车身腰线
-  });
+  const g = car();
+  g.rbox(0.7, 0.28, 0.35, 0.08, 0xffffff, 0, 1.7, -0.2);
+  g.box(0.72, 0.06, 0.37, 0xff6b6b, 0, 1.78, -0.2);
+  return g;
 }
 function police() {
-  return sedan(0xf4f6f8, (g) => {
-    g.box(1.73, 0.3, 2.0, 0x1c2a44, 0, 0.32, -0.2);
-    g.box(1.0, 0.14, 0.3, 0x222222, 0, 1.32, -0.3);
-    g.box(0.45, 0.16, 0.28, 0xff2a2a, -0.25, 1.36, -0.3);
-    g.box(0.45, 0.16, 0.28, 0x2a6bff, 0.25, 1.36, -0.3);
-  });
-}
-function suv(color) {
-  const g = new GB(), W = 1.9, L = 4.3;
-  wheels(g, 0.86, [-1.35, 1.35], 0.42, 0.3);
-  g.box(W, 0.75, L, color, 0, 0.35, 0);
-  g.box(1.8, 0.62, 2.9, GLASS, 0, 1.1, -0.45);
-  g.box(1.84, 0.1, 2.8, color, 0, 1.7, -0.45);
-  g.box(1.84, 0.62, 0.16, color, 0, 1.1, 0.25);
-  g.box(1.84, 0.62, 0.16, color, 0, 1.1, -1.2);
-  g.box(1.6, 0.06, 2.2, 0x2b2b2b, 0, 1.8, -0.45);
-  g.box(W + 0.06, 0.25, 0.18, 0x2a2a2e, 0, 0.3, L / 2);
-  g.box(W + 0.06, 0.25, 0.18, 0x2a2a2e, 0, 0.3, -L / 2);
-  for (const s of [-1, 1]) { g.box(0.38, 0.16, 0.06, 0xfff3c0, s * 0.62, 0.85, L / 2 + 0.01); g.box(0.3, 0.2, 0.06, 0xe0302a, s * 0.7, 0.85, -L / 2 - 0.01); }
-  g.box(0.9, 0.3, 0.05, 0x1f1f22, 0, 0.6, L / 2 + 0.02);
+  const g = car();
+  g.box(0.42, 0.18, 0.3, 0xff4d4d, -0.22, 1.7, -0.2); g.box(0.42, 0.18, 0.3, 0x4d7bff, 0.22, 1.7, -0.2);
+  g.box(1.84, 0.22, 1.6, 0x343a40, 0, 0.55, 0.1);
   return g;
 }
-function van(color) {
-  const g = new GB(), W = 1.95, L = 4.8;
-  wheels(g, 0.86, [-1.5, 1.55], 0.4, 0.3);
-  g.box(W, 2.0, 3.4, color, 0, 0.35, -0.7);
-  g.box(W, 1.15, 1.4, color, 0, 0.35, 1.7);
-  g.boxC(W * 0.96, 0.9, 0.12, GLASS, 0, 1.75, 1.45, -0.5, 0, 0);
-  for (const s of [-1, 1]) g.box(0.05, 0.6, 0.8, GLASS, s * (W / 2 + 0.01), 1.3, 1.25);
-  g.box(W + 0.02, 0.35, 3.42, 0xffffff, 0, 1.2, -0.7);
-  g.box(W + 0.06, 0.22, 0.16, 0x2a2a2e, 0, 0.3, L / 2 + 0.02);
-  for (const s of [-1, 1]) g.box(0.32, 0.16, 0.06, 0xfff3c0, s * 0.65, 0.85, L / 2 + 0.03);
-  return g;
-}
-function truck(color) {
-  const g = new GB(), W = 2.3;
-  wheels(g, 0.98, [-2.4, -1.4, 2.0], 0.48, 0.34);
-  g.box(W * 0.9, 0.3, 7.2, 0x2a2a2e, 0, 0.45, 0);
-  g.box(W, 2.0, 1.8, color, 0, 0.6, 2.6);
-  g.box(W * 0.95, 0.75, 0.1, GLASS, 0, 1.75, 3.51);
-  for (const s of [-1, 1]) g.box(0.05, 0.7, 1.0, GLASS, s * (W / 2 + 0.01), 1.7, 2.8);
-  g.box(W + 0.1, 3.0, 5.0, 0xf1f1ee, 0, 0.75, -0.95);
-  g.box(W + 0.12, 0.6, 4.2, color, 0, 1.9, -0.95);
-  g.box(W, 0.28, 0.2, 0x2a2a2e, 0, 0.45, 3.55);
-  for (const s of [-1, 1]) g.box(0.4, 0.2, 0.06, 0xfff3c0, s * 0.8, 0.9, 3.52);
-  return g;
-}
-function fireTruck() {
-  const g = truck(0xd42a20);
-  g.box(1.2, 0.2, 5.5, 0xd9d9d9, 0, 3.8, -0.8);
-  for (let i = 0; i < 9; i++) g.box(1.2, 0.08, 0.1, 0xbdbdbd, 0, 4.0, -3.2 + i * 0.6);
-  g.box(0.9, 0.18, 0.3, 0x2a6bff, 0, 2.62, 2.6);
-  return g;
-}
-function bus(color) {
-  const g = new GB(), W = 2.5, L = 10;
-  wheels(g, 1.1, [-3.2, 3.2], 0.52, 0.36);
-  g.box(W, 2.6, L, color, 0, 0.45, 0);
-  g.box(W + 0.04, 1.0, L - 1.6, GLASS, 0, 1.6, -0.3);
-  g.box(W * 0.9, 1.3, 0.06, GLASS, 0, 1.4, L / 2 + 0.01);
-  g.box(W + 0.05, 0.25, L + 0.05, 0xffffff, 0, 1.3, 0);
-  g.box(1.6, 0.4, 2.4, 0xd5d8dc, 0, 3.05, -1.5);
-  g.box(1.6, 0.3, 0.1, 0x111111, 0, 2.6, L / 2 + 0.02);
-  g.box(1.6, 0.18, 0.08, 0xffb300, 0, 2.66, L / 2 + 0.05);
-  for (const s of [-1, 1]) { g.box(0.35, 0.18, 0.06, 0xfff3c0, s * 0.85, 0.75, L / 2 + 0.01); g.box(0.3, 0.3, 0.06, 0xe0302a, s * 0.95, 0.9, -L / 2 - 0.01); }
-  return g;
-}
-function moto(color) {
+function suv() {
   const g = new GB();
-  g.cylC(0.3, 0.3, 0.12, WHEEL, 0, 0.3, 0.7, 0, 0, PI / 2, 10);
-  g.cylC(0.3, 0.3, 0.12, WHEEL, 0, 0.3, -0.7, 0, 0, PI / 2, 10);
-  g.box(0.3, 0.35, 1.1, color, 0, 0.45, 0);
-  g.box(0.28, 0.12, 0.6, 0x222222, 0, 0.8, -0.2);
-  g.box(0.7, 0.05, 0.05, 0x333333, 0, 1.0, 0.55);
-  g.box(0.2, 0.15, 0.1, 0xfff3c0, 0, 0.75, 0.7);
+  wheels(g, 0.86, [-1.2, 1.2], 0.48, 0.38);
+  g.rbox(2.0, 0.95, 3.9, 0.3, WHITE, 0, 0.35, 0, T1);
+  g.rbox(1.8, 0.8, 2.6, 0.25, WHITE, 0, 1.15, -0.35, { tile: TILE.carwin, cw: 2, ch: 1 });
+  g.rbox(1.86, 0.16, 2.5, 0.07, WHITE, 0, 1.9, -0.35, T1);
+  g.box(1.4, 0.08, 1.8, DGREY, 0, 2.06, -0.35);
+  for (const s of [-1, 1]) { g.sph(0.17, 0xfff3bf, s * 0.62, 0.95, 1.9, 6, 4); g.box(0.3, 0.2, 0.06, 0xff4d4d, s * 0.7, 0.95, -1.96); }
+  return g;
+}
+function van() {
+  const g = new GB();
+  wheels(g, 0.88, [-1.4, 1.4], 0.46, 0.36);
+  g.rbox(2.0, 2.1, 4.6, 0.35, WHITE, 0, 0.35, -0.1, T1);
+  g.rbox(1.9, 0.8, 0.3, 0.1, WHITE, 0, 1.45, 2.05, { tile: TILE.carwin, cw: 2, ch: 1 });
+  g.box(2.04, 0.5, 2.6, WHITE, 0, 1.3, -0.8);
+  for (const s of [-1, 1]) g.sph(0.17, 0xfff3bf, s * 0.62, 0.75, 2.15, 6, 4);
+  return g;
+}
+function truck() {
+  const g = new GB();
+  wheels(g, 1.0, [-2.3, -1.3, 2.0], 0.52, 0.4);
+  g.box(2.0, 0.35, 7.0, DGREY, 0, 0.5, 0);
+  g.rbox(2.3, 2.1, 1.9, 0.3, WHITE, 0, 0.6, 2.5, T1);
+  g.rbox(2.1, 0.8, 0.2, 0.08, WHITE, 0, 1.7, 3.4, { tile: TILE.carwin, cw: 2, ch: 1 });
+  g.rbox(2.4, 3.0, 5.0, 0.2, 0xf8f9fa, 0, 0.8, -1.0);
+  g.box(2.45, 0.7, 4.0, WHITE, 0, 1.9, -1.0, T1);
+  for (const s of [-1, 1]) g.sph(0.2, 0xfff3bf, s * 0.8, 1.0, 3.45, 6, 4);
+  return g;
+}
+function bus() {
+  const g = new GB(), L = 9.6;
+  wheels(g, 1.1, [-3.0, 3.0], 0.56, 0.42);
+  g.rbox(2.5, 2.9, L, 0.45, WHITE, 0, 0.45, 0, T1);
+  g.box(2.56, 1.15, L - 1.4, WHITE, 0, 1.55, -0.4, { tile: TILE.bus, cw: 1.8, ch: 1.15 });
+  g.rbox(2.2, 1.3, 0.2, 0.1, WHITE, 0, 1.45, L / 2 - 0.05, { tile: TILE.carwin, cw: 2, ch: 1.3 });
+  g.rbox(1.6, 0.4, 2.6, 0.15, 0xe9ecef, 0, 3.3, -1.5);
+  for (const s of [-1, 1]) g.sph(0.22, 0xfff3bf, s * 0.85, 0.9, L / 2, 6, 4);
+  return g;
+}
+function moto() {
+  const g = new GB();
+  g.cylC(0.32, 0.32, 0.16, TIRE, 0, 0.32, 0.65, 0, 0, PI / 2, 10); g.cylC(0.32, 0.32, 0.16, TIRE, 0, 0.32, -0.65, 0, 0, PI / 2, 10);
+  g.rbox(0.42, 0.45, 1.2, 0.15, WHITE, 0, 0.4, 0, T1);
+  g.rbox(0.36, 0.14, 0.6, 0.06, DGREY, 0, 0.85, -0.2);
+  g.box(0.7, 0.06, 0.06, DGREY, 0, 1.05, 0.5); g.sph(0.12, 0xfff3bf, 0, 0.85, 0.65, 6, 4);
   return g;
 }
 
-function person(shirt, pants, hair, skin) {
+// ---------- 行人（大头可爱风）----------
+function person(pants, hair, skin, style) {
   const g = new GB();
-  g.box(0.17, 0.78, 0.2, pants, -0.11, 0, 0);
-  g.box(0.17, 0.78, 0.2, pants, 0.11, 0, 0);
-  g.box(0.2, 0.08, 0.28, 0x2b2b2b, -0.11, 0, 0.03);
-  g.box(0.2, 0.08, 0.28, 0x2b2b2b, 0.11, 0, 0.03);
-  g.box(0.48, 0.62, 0.28, shirt, 0, 0.76, 0);
-  g.box(0.13, 0.55, 0.16, shirt, -0.31, 0.8, 0);
-  g.box(0.13, 0.55, 0.16, shirt, 0.31, 0.8, 0);
-  g.box(0.12, 0.13, 0.14, skin, -0.31, 0.68, 0);
-  g.box(0.12, 0.13, 0.14, skin, 0.31, 0.68, 0);
-  g.box(0.14, 0.08, 0.14, skin, 0, 1.36, 0);
-  g.box(0.34, 0.34, 0.32, skin, 0, 1.42, 0);
-  g.box(0.37, 0.12, 0.35, hair, 0, 1.72, -0.01);
-  g.box(0.37, 0.24, 0.1, hair, 0, 1.5, -0.14);
-  g.box(0.05, 0.05, 0.02, 0x222222, -0.08, 1.6, 0.165);
-  g.box(0.05, 0.05, 0.02, 0x222222, 0.08, 1.6, 0.165);
+  g.rbox(0.18, 0.55, 0.2, 0.06, pants, -0.11, 0, 0); g.rbox(0.18, 0.55, 0.2, 0.06, pants, 0.11, 0, 0);
+  g.rbox(0.5, 0.58, 0.32, 0.12, WHITE, 0, 0.5, 0, T1);
+  g.rbox(0.13, 0.42, 0.14, 0.05, WHITE, -0.32, 0.6, 0, T1); g.rbox(0.13, 0.42, 0.14, 0.05, WHITE, 0.32, 0.6, 0, T1);
+  g.sph(0.3, skin, 0, 1.34, 0, 10, 7);
+  if (style === 0) g.sph(0.32, hair, 0, 1.42, -0.03, 10, 5, 0.85);
+  else if (style === 1) { g.sph(0.32, hair, 0, 1.42, -0.03, 10, 5, 0.85); g.sph(0.14, hair, 0, 1.62, -0.25, 6, 4); }
+  else { g.cyl(0.33, 0.33, 0.08, hair, 0, 1.5, 0, 10); g.cyl(0.22, 0.24, 0.2, hair, 0, 1.56, 0, 10); }
+  g.box(0.06, 0.08, 0.02, 0x343a40, -0.1, 1.34, 0.29); g.box(0.06, 0.08, 0.02, 0x343a40, 0.1, 1.34, 0.29);
+  g.box(0.08, 0.04, 0.02, 0xff8fab, -0.17, 1.25, 0.27); g.box(0.08, 0.04, 0.02, 0xff8fab, 0.17, 1.25, 0.27);
   return g;
 }
 
-function treeRound(leaf, leaf2) {
+// ---------- 植物/街道 ----------
+function treeRound() {
   const g = new GB();
-  g.cyl(0.14, 0.2, 1.5, 0x7a5232, 0, 0, 0, 7);
-  g.ico(1.05, leaf, 0, 2.2, 0, 1, 0.9, 1);
-  g.ico(0.75, leaf2, 0.45, 2.75, 0.15);
-  g.ico(0.7, leaf2, -0.45, 2.55, -0.3);
-  g.ico(0.6, leaf, 0.1, 3.05, -0.25);
+  g.cyl(0.16, 0.22, 1.4, 0xb08968, 0, 0, 0, 6);
+  g.ico(1.15, WHITE, 0, 2.2, 0, 1, 0.95, 1, T1); g.ico(0.75, WHITE, 0.55, 2.0, 0.3, 1, 1, 1, T1); g.ico(0.7, WHITE, -0.5, 2.6, -0.2, 1, 1, 1, T1);
   return g;
 }
-function treePine(leaf) {
+function treePine() {
   const g = new GB();
-  g.cyl(0.14, 0.18, 0.9, 0x6d4a2d, 0, 0, 0, 6);
-  g.cone(1.15, 1.6, leaf, 0, 0.75, 0, 7);
-  g.cone(0.9, 1.4, leaf, 0, 1.6, 0, 7, 0.4);
-  g.cone(0.6, 1.2, leaf, 0, 2.4, 0, 7, 0.8);
+  g.cyl(0.15, 0.2, 0.8, 0xb08968, 0, 0, 0, 6);
+  g.cone(1.2, 1.6, WHITE, 0, 0.7, 0, 7, 0, T1); g.cone(0.92, 1.4, WHITE, 0, 1.6, 0, 7, 0.4, T1); g.cone(0.6, 1.1, WHITE, 0, 2.45, 0, 7, 0.8, T1);
   return g;
 }
-function palm() {
-  const g = new GB();
-  for (let i = 0; i < 5; i++) g.cylC(0.16 - i * 0.012, 0.17 - i * 0.012, 0.75, 0x8f6b43, i * 0.05, 0.38 + i * 0.72, 0, 0, 0, -0.04, 7);
-  for (let i = 0; i < 6; i++) { const a = i / 6 * PI * 2; g.boxC(0.45, 0.06, 1.7, 0x3f9b3f, Math.sin(a) * 0.75 + 0.25, 3.55, Math.cos(a) * 0.75, 0.35 * Math.cos(a), a, 0); }
-  g.ico(0.25, 0x6b4b2b, 0.25, 3.6, 0);
-  return g;
-}
-function bush(c) { const g = new GB(); g.ico(0.6, c, 0, 0.45, 0, 1.1, 0.8, 1); g.ico(0.4, c, 0.4, 0.4, 0.2); return g; }
-function flowerBed() {
-  const g = new GB();
-  g.box(1.8, 0.35, 0.9, 0x9b8b7a, 0, 0, 0);
-  g.box(1.6, 0.05, 0.7, 0x5a3b22, 0, 0.35, 0);
-  const cs = [0xff4d6d, 0xffd23f, 0xff8fab, 0xffffff, 0xb983ff];
-  for (let i = 0; i < 8; i++) g.ico(0.16, cs[i % 5], -0.65 + (i % 4) * 0.43, 0.48, i < 4 ? -0.15 : 0.18);
-  return g;
-}
-function lamp() {
-  const g = new GB();
-  g.cyl(0.18, 0.2, 0.3, 0x2f3338, 0, 0, 0, 8);
-  g.cyl(0.07, 0.09, 4.2, 0x3b4047, 0, 0.3, 0, 8);
-  g.box(0.08, 0.08, 0.9, 0x3b4047, 0, 4.4, 0.4);
-  g.box(0.3, 0.14, 0.5, 0x2f3338, 0, 4.32, 0.85);
-  g.box(0.22, 0.04, 0.4, 0xfff2b0, 0, 4.29, 0.85);
-  return g;
-}
-function bench() {
-  const g = new GB(), W = 0x9c6636;
-  for (const s of [-0.7, 0.7]) { g.box(0.08, 0.45, 0.5, 0x2e2e33, s, 0, 0); g.box(0.08, 0.5, 0.06, 0x2e2e33, s, 0.45, -0.24); }
-  for (let i = 0; i < 3; i++) g.box(1.7, 0.05, 0.13, W, 0, 0.43, -0.15 + i * 0.15);
-  for (let i = 0; i < 2; i++) g.box(1.7, 0.12, 0.05, W, 0, 0.62 + i * 0.2, -0.26);
-  return g;
-}
-function hydrant() {
-  const g = new GB(), R = 0xd8332a;
-  g.cyl(0.2, 0.22, 0.08, 0x9a9a9a, 0, 0, 0, 8);
-  g.cyl(0.15, 0.16, 0.55, R, 0, 0.08, 0, 10);
-  g.cyl(0.19, 0.19, 0.07, R, 0, 0.6, 0, 10);
-  g.sph(0.14, R, 0, 0.67, 0, 8, 5);
-  g.cyl(0.04, 0.04, 0.1, 0xe8e8e8, 0, 0.78, 0, 6);
-  g.cylC(0.06, 0.06, 0.42, 0xe8e8e8, 0, 0.42, 0, 0, 0, PI / 2, 6);
-  g.cylC(0.07, 0.07, 0.12, R, 0, 0.42, 0.15, PI / 2, 0, 0, 6);
-  return g;
-}
-function trashBin() {
-  const g = new GB();
-  g.cyl(0.26, 0.23, 0.82, 0x2f7d50, 0, 0, 0, 10);
-  g.cyl(0.29, 0.29, 0.07, 0x23593a, 0, 0.82, 0, 10);
-  g.cyl(0.08, 0.08, 0.06, 0x23593a, 0, 0.89, 0, 6);
-  g.cyl(0.265, 0.265, 0.06, 0xd8d8d8, 0, 0.55, 0, 10);
-  return g;
-}
-function cone() {
-  const g = new GB();
-  g.box(0.46, 0.05, 0.46, 0xff6d1a, 0, 0, 0);
-  g.cone(0.19, 0.65, 0xff6d1a, 0, 0.05, 0, 10);
-  g.cyl(0.125, 0.145, 0.1, 0xffffff, 0, 0.28, 0, 10);
-  return g;
-}
-function mailbox() {
-  const g = new GB();
-  g.box(0.1, 0.6, 0.1, 0x333333, 0, 0, 0);
-  g.box(0.5, 0.55, 0.45, 0x2457c5, 0, 0.6, 0);
-  g.cylC(0.25, 0.25, 0.45, 0x2457c5, 0, 1.15, 0, PI / 2, 0, 0, 10);
-  g.box(0.3, 0.04, 0.02, 0x111111, 0, 1.0, 0.23);
-  return g;
-}
-function trafficLight() {
-  const g = new GB();
-  g.cyl(0.1, 0.12, 3.4, 0x34383e, 0, 0, 0, 8);
-  g.box(0.1, 0.1, 2.0, 0x34383e, 0, 3.3, 0.95);
-  g.box(0.36, 1.0, 0.3, 0x222326, 0, 2.6, 1.8);
-  g.box(0.2, 0.2, 0.04, 0xff3b30, 0, 3.3, 1.96);
-  g.box(0.2, 0.2, 0.04, 0xffcc00, 0, 3.0, 1.96);
-  g.box(0.2, 0.2, 0.04, 0x34d058, 0, 2.7, 1.96);
-  return g;
-}
-function busStop() {
-  const g = new GB();
-  for (const s of [-1.4, 1.4]) g.box(0.08, 2.4, 0.08, 0x9aa1aa, s, 0, -0.5);
-  g.box(3.2, 0.1, 1.4, 0xe6e9ec, 0, 2.4, 0);
-  g.box(2.8, 1.8, 0.05, 0xb9dbe8, 0, 0.45, -0.55);
-  g.box(0.9, 1.6, 0.12, 0xff9e2c, 1.45, 0.5, 0);
-  g.box(2.0, 0.08, 0.4, 0x9c6636, -0.2, 0.45, -0.3);
-  return g;
-}
-function kiosk(c) {
-  const g = new GB();
-  g.box(2.0, 2.2, 1.8, 0xf3efe6, 0, 0, 0);
-  g.box(1.7, 1.0, 0.05, GLASS, 0, 1.0, 0.91);
-  g.box(2.0, 0.08, 0.6, 0xbbbbbb, 0, 0.95, 1.15);
-  for (let i = 0; i < 5; i++) g.boxC(0.4, 0.06, 1.0, i % 2 ? 0xffffff : c, -0.8 + i * 0.4, 2.3, 1.2, 0.35, 0, 0);
-  g.box(2.1, 0.25, 1.9, c, 0, 2.2, 0);
-  return g;
-}
-function fountain() {
-  const g = new GB(), ST = 0xcfc8b8;
-  g.cyl(2.4, 2.5, 0.55, ST, 0, 0, 0, 16);
-  g.cyl(2.1, 2.1, 0.05, 0x4fb6ea, 0, 0.52, 0, 16);
-  g.cyl(0.35, 0.45, 1.3, ST, 0, 0.5, 0, 10);
-  g.cyl(0.95, 0.4, 0.3, ST, 0, 1.75, 0, 12);
-  g.cyl(0.8, 0.8, 0.05, 0x7fd0f5, 0, 2.02, 0, 12);
-  g.cyl(0.08, 0.2, 0.7, 0xc3ecff, 0, 2.05, 0, 8);
-  g.ico(0.18, 0xc3ecff, 0, 2.8, 0);
-  return g;
-}
-function statue() {
-  const g = new GB();
-  g.box(2.0, 1.0, 2.0, 0xbfb8a8, 0, 0, 0);
-  g.box(1.6, 0.25, 1.6, 0xa8a090, 0, 1.0, 0);
-  const B = 0x6f8f7a;
-  g.box(0.3, 1.0, 0.35, B, -0.2, 1.25, 0); g.box(0.3, 1.0, 0.35, B, 0.2, 1.25, 0);
-  g.box(0.9, 1.1, 0.5, B, 0, 2.2, 0);
-  g.boxC(0.25, 1.1, 0.25, B, 0.6, 3.4, 0, 0, 0, -0.3);
-  g.box(0.5, 0.5, 0.5, B, 0, 3.3, 0);
-  return g;
-}
-function bikeRack() {
-  const g = new GB();
-  for (let i = 0; i < 4; i++) g.add(new THREE.TorusGeometry(0.35, 0.04, 4, 10, PI), 0x9aa1aa, -0.9 + i * 0.6, 0, 0, 0, PI / 2, 0);
-  return g;
-}
-function bicycle(c) {
-  const g = new GB();
-  for (const z of [-0.5, 0.5]) g.add(new THREE.TorusGeometry(0.32, 0.04, 4, 12), 0x222222, 0, 0.34, z, 0, PI / 2, 0);
-  g.boxC(0.05, 0.05, 0.9, c, 0, 0.6, 0, -0.2, 0, 0);
-  g.boxC(0.05, 0.5, 0.05, c, 0, 0.55, -0.2, 0.3, 0, 0);
-  g.box(0.12, 0.05, 0.22, 0x222222, 0, 0.82, -0.25);
-  g.box(0.5, 0.04, 0.04, 0x222222, 0, 0.9, 0.42);
-  return g;
-}
-function umbrellaTable(c) {
-  const g = new GB();
-  g.cyl(0.5, 0.5, 0.05, 0xffffff, 0, 0.72, 0, 10); g.cyl(0.05, 0.05, 0.72, 0x888888, 0, 0, 0, 6);
-  g.cyl(0.04, 0.04, 2.2, 0x888888, 0, 0.77, 0, 6);
-  g.add(new THREE.ConeGeometry(1.2, 0.5, 8), c, 0, 2.75, 0);
-  for (const a of [0, PI / 2, PI, PI * 1.5]) g.box(0.35, 0.45, 0.35, 0xffffff, Math.sin(a) * 0.85, 0, Math.cos(a) * 0.85);
-  return g;
-}
-function vending(c) {
-  const g = new GB();
-  g.box(1.0, 1.9, 0.8, c, 0, 0, 0);
-  g.box(0.7, 1.1, 0.04, 0xdde8f2, -0.08, 0.6, 0.41);
-  g.box(0.15, 0.5, 0.04, 0x222222, 0.36, 0.9, 0.41);
-  return g;
-}
-function waterTower() {
-  const g = new GB();
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.box(0.15, 3, 0.15, 0x5a4a3a, x, 0, z);
-  g.cyl(1.6, 1.6, 2.2, 0x8a6a4a, 0, 3, 0, 12);
-  g.cone(1.75, 1.0, 0x5a5a5a, 0, 5.2, 0, 12);
-  return g;
-}
+function bush() { const g = new GB(); g.ico(0.62, WHITE, 0, 0.5, 0, 1.15, 0.85, 1, T1); g.ico(0.42, WHITE, 0.45, 0.4, 0.2, 1, 1, 1, T1); g.ico(0.12, 0xff8fab, 0.2, 0.95, 0.3); g.ico(0.12, 0xffd43b, -0.3, 0.85, 0.2); return g; }
+function flowerBed() { const g = new GB(); g.rbox(1.8, 0.4, 0.9, 0.12, 0xe9ecef, 0, 0, 0); g.box(1.6, 0.05, 0.7, 0x8d6e63, 0, 0.4, 0); const cs = [0xff6b6b, 0xffd43b, 0xff8cc6, 0xffffff, 0xb197fc]; for (let i = 0; i < 6; i++) g.ico(0.2, cs[i % 5], -0.6 + (i % 3) * 0.6, 0.55, i < 3 ? -0.15 : 0.18); return g; }
+function lamp() { const g = new GB(); g.cyl(0.18, 0.22, 0.3, DGREY, 0, 0, 0, 6); g.cyl(0.07, 0.09, 3.6, 0x5c677d, 0, 0.3, 0, 6); g.sph(0.32, 0xfff9db, 0, 4.05, 0, 8, 6); g.cyl(0.36, 0.2, 0.15, 0x5c677d, 0, 4.25, 0, 8); return g; }
+function bench() { const g = new GB(); for (const s of [-0.7, 0.7]) g.box(0.1, 0.42, 0.5, DGREY, s, 0, 0); g.rbox(1.7, 0.1, 0.5, 0.04, 0xd9a066, 0, 0.42, 0); g.rbox(1.7, 0.35, 0.1, 0.04, 0xd9a066, 0, 0.55, -0.24); return g; }
+function hydrant() { const g = new GB(); g.cyl(0.17, 0.19, 0.6, 0xff6b6b, 0, 0, 0, 8); g.sph(0.17, 0xff6b6b, 0, 0.6, 0, 8, 4); g.cylC(0.07, 0.07, 0.46, 0xffd43b, 0, 0.4, 0, 0, 0, PI / 2, 6); return g; }
+function trashBin() { const g = new GB(); g.cyl(0.28, 0.24, 0.8, 0x51cf66, 0, 0, 0, 8); g.cyl(0.31, 0.31, 0.1, 0x2f9e44, 0, 0.8, 0, 8); return g; }
+function cone() { const g = new GB(); g.rbox(0.5, 0.06, 0.5, 0.03, 0xff922b, 0, 0, 0); g.cone(0.2, 0.65, 0xff922b, 0, 0.06, 0, 8); g.cyl(0.13, 0.15, 0.1, WHITE, 0, 0.3, 0, 8); return g; }
+function mailbox() { const g = new GB(); g.box(0.1, 0.55, 0.1, DGREY, 0, 0, 0); g.rbox(0.5, 0.6, 0.5, 0.15, 0x4dabf7, 0, 0.55, 0); g.box(0.3, 0.04, 0.02, 0x343a40, 0, 0.95, 0.26); return g; }
+function busStop() { const g = new GB(); for (const s of [-1.4, 1.4]) g.box(0.1, 2.4, 0.1, GREY, s, 0, -0.5); g.rbox(3.3, 0.14, 1.4, 0.06, WHITE, 0, 2.4, 0, T1); g.box(2.8, 1.8, 0.06, 0xd0ebff, 0, 0.45, -0.55); g.rbox(0.9, 1.6, 0.12, 0.05, WHITE, 1.45, 0.5, 0, T1); g.rbox(2.0, 0.1, 0.4, 0.04, 0xd9a066, -0.2, 0.45, -0.3); return g; }
+function kiosk() { const g = new GB(); g.rbox(2.0, 2.2, 1.8, 0.2, 0xfff9db, 0, 0, 0); g.box(1.7, 0.9, 0.05, WHITE, 0, 1.0, 0.91, { tile: TILE.store, cw: 1.7, ch: 0.9 }); g.add(new THREE.BoxGeometry(2.1, 0.08, 1.0), WHITE, 0, 2.15, 1.25, 0.35, 0, 0, 1, 1, 1, { tile: TILE.awning, cw: 2.1, ch: 1 }); g.rbox(2.2, 0.3, 2.0, 0.1, WHITE, 0, 2.2, 0, T1); return g; }
+function fountain() { const g = new GB(); g.cyl(2.4, 2.5, 0.6, 0xe9ecef, 0, 0, 0, 14); g.cyl(2.15, 2.15, 0.06, 0x74c0fc, 0, 0.55, 0, 14); g.cyl(0.35, 0.45, 1.3, 0xe9ecef, 0, 0.5, 0, 8); g.cyl(0.95, 0.4, 0.3, 0xe9ecef, 0, 1.75, 0, 10); g.cyl(0.8, 0.8, 0.06, 0x99e9f2, 0, 2.02, 0, 10); g.cone(0.25, 0.9, 0xd0ebff, 0, 2.05, 0, 6); return g; }
+function statue() { const g = new GB(); g.rbox(2.0, 1.0, 2.0, 0.1, 0xdee2e6, 0, 0, 0); const B = 0x8ce99a; g.rbox(1.0, 1.4, 0.6, 0.25, B, 0, 1.0, 0); g.sph(0.5, B, 0, 2.8, 0, 8, 6); g.rbox(0.25, 1.0, 0.25, 0.1, B, 0.6, 2.3, 0); return g; }
+function umbrella() { const g = new GB(); g.cyl(0.5, 0.5, 0.06, WHITE, 0, 0.72, 0, 10); g.cyl(0.05, 0.05, 2.4, GREY, 0, 0, 0, 5); g.add(new THREE.ConeGeometry(1.3, 0.55, 8), WHITE, 0, 2.6, 0, 0, 0, 0, 1, 1, 1, T1); return g; }
+function vending() { const g = new GB(); g.rbox(1.0, 1.9, 0.8, 0.12, WHITE, 0, 0, 0, T1); g.box(0.66, 1.1, 0.04, WHITE, -0.08, 0.6, 0.41, { tile: TILE.store, cw: 0.66, ch: 1.1 }); return g; }
+function bicycle() { const g = new GB(); for (const z of [-0.5, 0.5]) g.add(new THREE.TorusGeometry(0.32, 0.05, 4, 10), TIRE, 0, 0.34, z, 0, PI / 2, 0); g.add(new THREE.BoxGeometry(0.06, 0.06, 1.0), WHITE, 0, 0.6, 0, -0.2, 0, 0, 1, 1, 1, T1); g.box(0.14, 0.06, 0.24, DGREY, 0, 0.82, -0.25); g.box(0.5, 0.05, 0.05, DGREY, 0, 0.9, 0.42); return g; }
+function waterTower() { const g = new GB(); for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.box(0.16, 3, 0.16, 0x8d6e63, x, 0, z); g.cyl(1.6, 1.6, 2.2, 0xffa94d, 0, 3, 0, 10); g.cone(1.75, 1.0, 0xff6b6b, 0, 5.2, 0, 10); return g; }
+function tlight() { const g = new GB(); g.cyl(0.1, 0.12, 3.3, 0x5c677d, 0, 0, 0, 6); g.box(0.1, 0.1, 1.8, 0x5c677d, 0, 3.2, 0.85); g.rbox(0.4, 1.0, 0.34, 0.1, 0x343a40, 0, 2.5, 1.7); for (const [y, c] of [[3.25, 0xff6b6b], [2.95, 0xffd43b], [2.65, 0x69db7c]]) g.sph(0.11, c, 0, y, 1.88, 6, 4); return g; }
 
-// ---------- 建筑 ----------
-function house(wall, roof) {
+// ---------- 建筑（立面用图集，几何极简）----------
+function house(roof) {
   const g = new GB();
-  g.box(6.4, 0.3, 6.4, 0x9a958c, 0, 0, 0);
-  g.facade(6, 3.2, 6, wall, 0, 0.3, 0, 2.4, 3.2, 'house');
-  g.box(6.3, 0.2, 6.3, 0xf2f2f2, 0, 3.5, 0);
-  g.add(new THREE.ConeGeometry(4.75, 2.3, 4), roof, 0, 3.7 + 1.15, 0, 0, PI / 4, 0);
-  g.box(0.7, 1.8, 0.7, 0x8a5a44, 1.6, 4.0, -1.0);
-  g.box(1.1, 2.0, 0.1, 0x6b4226, 0, 0.3, 3.02);
-  g.box(1.5, 0.12, 0.8, 0xbcb6aa, 0, 0.3, 3.4);
-  g.boxC(1.8, 0.1, 1.0, roof, 0, 2.55, 3.4, 0.25, 0, 0);
+  g.box(6.4, 0.3, 6.4, 0xdee2e6, 0, 0, 0);
+  g.box(6, 3.2, 6, WHITE, 0, 0.3, 0, { tint: 1, tile: TILE.house, cw: 3, ch: 3.2 });
+  g.box(1.3, 2.1, 0.12, WHITE, 0, 0.3, 3.02, { tile: TILE.door, cw: 1.3, ch: 2.1 });
+  g.add(new THREE.ConeGeometry(4.8, 2.6, 4), roof, 0, 3.5 + 1.3, 0, 0, PI / 4, 0);
+  g.rbox(0.8, 1.6, 0.8, 0.1, 0xfff5f5, 1.6, 4.1, -1.0);
   return g;
 }
-function shop(wall, aw, sign) {
+function shop(wall) {
   const g = new GB();
-  g.facade(9, 3.4, 8, 0xe7eef5, 0, 0, 0, 3, 3.4, 'store');
-  g.facade(9, 3.2, 8, wall, 0, 3.4, 0, 2.25, 3.2, 'apt');
-  g.box(9.4, 0.5, 8.4, 0xf1f1f1, 0, 6.6, 0);
-  g.box(9.2, 0.25, 8.2, 0xdedede, 0, 3.3, 0);
-  for (let i = 0; i < 6; i++) g.boxC(1.5, 0.08, 1.4, i % 2 ? 0xffffff : aw, -3.75 + i * 1.5, 3.1, 4.55, 0.38, 0, 0);
-  g.box(5.0, 1.0, 0.3, sign, 0, 5.4, 4.05);
-  g.box(4.4, 0.5, 0.05, 0xffffff, 0, 5.65, 4.22);
-  g.box(1.6, 0.9, 1.2, 0xb0b5bb, -2.5, 7.1, -1.5);
-  g.box(1.2, 0.7, 1.2, 0xb0b5bb, 2.2, 7.1, -2);
+  g.box(9, 3.4, 8, WHITE, 0, 0, 0, { tile: TILE.store, cw: 3, ch: 3.4 });
+  g.box(9, 3.2, 8, wall, 0, 3.4, 0, { tile: TILE.brick, cw: 3, ch: 3.2 });
+  g.rbox(9.4, 0.5, 8.4, 0.12, WHITE, 0, 6.6, 0);
+  g.add(new THREE.BoxGeometry(9.2, 0.12, 1.6), WHITE, 0, 3.15, 4.6, 0.38, 0, 0, 1, 1, 1, { tile: TILE.awning, cw: 2.3, ch: 1.6 });
+  g.rbox(5, 1.1, 0.35, 0.12, WHITE, 0, 5.3, 4.1, T1);
+  g.box(4.2, 0.5, 0.05, WHITE, 0, 5.6, 4.29, { tile: TILE.sign, cw: 4.2, ch: 0.5 });
+  g.rbox(1.6, 0.9, 1.2, 0.15, 0xe9ecef, -2.5, 7.1, -1.5);
   return g;
 }
-function apartment(wall, trim) {
-  const g = new GB(), F = 5, FH = 3;
-  g.box(11.6, 0.6, 11.6, 0x8d8d8d, 0, 0, 0);
-  g.facade(11, F * FH, 11, wall, 0, 0.6, 0, 2.75, FH, 'apt');
-  for (let f = 1; f < F; f++) g.box(11.25, 0.2, 11.25, trim, 0, 0.6 + f * FH - 0.1, 0);
-  g.box(11.5, 0.8, 11.5, trim, 0, 0.6 + F * FH, 0);
-  g.box(10.6, 0.1, 10.6, 0x7b7f86, 0, 1.4 + F * FH, 0);
-  for (let f = 1; f < F; f++) for (const x of [-2.75, 2.75]) {
-    g.box(2.4, 0.15, 1.0, trim, x, 0.6 + f * FH, 5.95);
-    g.box(2.4, 0.8, 0.07, trim, x, 0.75 + f * FH, 6.42);
-  }
-  g.box(3, 0.2, 1.6, trim, 0, 3.2, 6.2);
-  g.box(1.6, 2.4, 0.1, 0x4a3a2a, 0, 0.6, 5.52);
-  const top = 1.5 + F * FH;
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.box(0.12, 1.4, 0.12, 0x5a4a3a, 2.5 + x * 0.8, top, -2 + z * 0.8);
-  g.cyl(1.2, 1.2, 1.8, 0x8a6a4a, 2.5, top + 1.4, -2, 10);
-  g.cone(1.3, 0.7, 0x5a5a5a, 2.5, top + 3.2, -2, 10);
-  g.box(1.4, 0.9, 1.4, 0xb0b5bb, -3, top, 2);
+function apartment() {
+  const g = new GB(), H = 15;
+  g.box(11.6, 0.6, 11.6, 0xdee2e6, 0, 0, 0);
+  g.box(11, H, 11, WHITE, 0, 0.6, 0, { tint: 1, tile: TILE.apt, cw: 2.75, ch: 3 });
+  for (let f = 1; f < 5; f++) g.box(11.3, 0.2, 11.3, WHITE, 0, 0.5 + f * 3, 0);
+  g.rbox(11.6, 0.9, 11.6, 0.2, WHITE, 0, 0.6 + H, 0);
+  g.cyl(1.2, 1.2, 1.8, 0xffa94d, 2.5, H + 1.5, -2, 8); g.cone(1.3, 0.8, 0xff6b6b, 2.5, H + 3.3, -2, 8);
+  g.rbox(1.6, 1.0, 1.6, 0.2, 0xe9ecef, -3, H + 1.5, 2);
   return g;
 }
-function office(glass, trim) {
-  const g = new GB(), H = 28;
-  g.box(12.8, 1, 12.8, 0x9c9a94, 0, 0, 0);
-  g.facade(12, H, 12, glass, 0, 1, 0, 3, 4, 'office');
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.box(0.7, H, 0.7, trim, x * 6, 1, z * 6);
-  g.box(12.6, 1.3, 12.6, trim, 0, H + 1, 0);
-  g.box(11.6, 0.1, 11.6, 0x6e7278, 0, H + 2.3, 0);
-  g.cyl(3.4, 3.4, 0.2, 0x3a3d42, 0, H + 2.3, 0, 16);
-  g.cyl(2.8, 2.8, 0.05, 0xffd23f, 0, H + 2.5, 0, 16);
-  g.cyl(2.5, 2.5, 0.06, 0x3a3d42, 0, H + 2.5, 0, 16);
-  g.box(0.4, 0.06, 2.0, 0xffffff, -0.6, H + 2.55, 0); g.box(0.4, 0.06, 2.0, 0xffffff, 0.6, H + 2.55, 0); g.box(0.9, 0.06, 0.35, 0xffffff, 0, H + 2.55, 0);
-  g.box(2.4, 1.2, 1.6, 0xb0b5bb, -4.5, H + 2.3, -4.5);
-  g.box(4, 0.3, 1.5, 0x9c9a94, 0, 1, 6.6);
+function office() {
+  const g = new GB(), H = 26;
+  g.box(12.8, 1, 12.8, 0xdee2e6, 0, 0, 0);
+  g.box(12, H, 12, WHITE, 0, 1, 0, { tint: 1, tile: TILE.office, cw: 3, ch: 4 });
+  g.rbox(12.6, 1.3, 12.6, 0.25, WHITE, 0, H + 1, 0);
+  g.cyl(3.4, 3.4, 0.2, 0x495057, 0, H + 2.3, 0, 12); g.cyl(2.8, 2.8, 0.05, 0xffd43b, 0, H + 2.5, 0, 12); g.cyl(2.5, 2.5, 0.06, 0x495057, 0, H + 2.5, 0, 12);
   return g;
 }
-function skyscraper(glass, trim) {
+function skyscraper() {
   const g = new GB();
-  g.facade(14, 8, 14, 0xd9d3c5, 0, 0, 0, 3.5, 4, 'store');
-  g.box(14.4, 0.8, 14.4, trim, 0, 8, 0);
-  g.facade(10, 36, 10, glass, 0, 8.8, 0, 2.5, 4, 'tower');
-  for (const [x, z] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) g.box(0.5, 36, 0.5, trim, x * 5, 8.8, z * 5);
-  for (let i = 1; i < 3; i++) g.box(10.3, 0.5, 10.3, trim, 0, 8.8 + i * 12, 0);
-  g.box(10.4, 1, 10.4, trim, 0, 44.8, 0);
-  g.facade(6.5, 8, 6.5, glass, 0, 45.8, 0, 2.2, 4, 'tower');
-  g.box(7, 0.8, 7, trim, 0, 53.8, 0);
-  g.cyl(0.6, 1.0, 2, trim, 0, 54.6, 0, 8);
-  g.cyl(0.08, 0.15, 6, 0xd0d0d0, 0, 56.6, 0, 6);
-  g.sph(0.25, 0xff3b30, 0, 62.6, 0, 6, 4);
-  g.box(6, 0.4, 1.4, trim, 0, 4, 7.4);
+  g.box(14, 8, 14, 0xf1f3f5, 0, 0, 0, { tile: TILE.store, cw: 3.5, ch: 4 });
+  g.rbox(14.4, 0.8, 14.4, 0.2, WHITE, 0, 8, 0);
+  g.box(10, 32, 10, WHITE, 0, 8.8, 0, { tint: 1, tile: TILE.tower, cw: 2.5, ch: 4 });
+  g.rbox(10.5, 1, 10.5, 0.25, WHITE, 0, 40.8, 0);
+  g.box(6.5, 8, 6.5, WHITE, 0, 41.8, 0, { tint: 1, tile: TILE.tower, cw: 2.2, ch: 4 });
+  g.rbox(7, 0.8, 7, 0.2, WHITE, 0, 49.8, 0);
+  g.cyl(0.1, 0.18, 6, 0xdee2e6, 0, 50.6, 0, 5); g.sph(0.3, 0xff6b6b, 0, 56.8, 0, 6, 4);
   return g;
 }
-function towerSlim(glass, trim) {
+function gasStation() { const g = new GB(); for (const [x, z] of [[-3, -2], [3, -2], [-3, 2], [3, 2]]) g.box(0.4, 4, 0.4, WHITE, x, 0, z); g.rbox(8, 0.7, 6, 0.2, WHITE, 0, 4, 0); g.box(8.05, 0.3, 6.05, 0x69db7c, 0, 4.15, 0); for (const x of [-1.5, 1.5]) { g.rbox(0.6, 1.4, 0.7, 0.12, 0xff6b6b, x, 0, 0); } return g; }
+// 叠叠楼：单层楼块（可堆叠）
+function segment(w, tile) {
+  const g = new GB(), h = 2.6;
+  g.box(w, h - 0.3, w, WHITE, 0, 0, 0, { tint: 1, tile, cw: w / Math.max(1, Math.round(w / 3)), ch: h - 0.3 });
+  g.rbox(w + 0.5, 0.3, w + 0.5, 0.1, WHITE, 0, h - 0.3, 0);
+  return g;
+}
+function segRoof(w) {
   const g = new GB();
-  g.facade(9, 32, 9, glass, 0, 0, 0, 2.25, 4, 'tower');
-  g.box(9.6, 4, 9.6, 0xd3cfc4, 0, 0, 0);
-  for (let i = 1; i < 4; i++) g.box(9.2, 0.35, 9.2, trim, 0, i * 8, 0);
-  g.box(9.4, 1.2, 9.4, trim, 0, 32, 0);
-  g.box(5, 3, 5, 0xb5bcc4, 0, 33.2, 0);
-  g.cyl(0.08, 0.12, 6, 0xd0d0d0, 2, 33.2, 2, 6);
+  g.rbox(w + 0.5, 0.6, w + 0.5, 0.2, WHITE, 0, 0, 0, T1);
+  g.add(new THREE.ConeGeometry(w * 0.62, w * 0.45, 4), WHITE, 0, 0.6 + w * 0.225, 0, 0, PI / 4, 0, 1, 1, 1, T1);
+  g.sph(0.35, 0xffd43b, 0, 0.6 + w * 0.45 + 0.2, 0, 6, 4);
   return g;
 }
-function gasStation() {
-  const g = new GB();
-  for (const [x, z] of [[-3, -2], [3, -2], [-3, 2], [3, 2]]) g.box(0.4, 4, 0.4, 0xeaeaea, x, 0, z);
-  g.box(8, 0.6, 6, 0xffffff, 0, 4, 0);
-  g.box(8.05, 0.3, 6.05, 0x1f8f4f, 0, 4.1, 0);
-  for (const x of [-1.5, 1.5]) { g.box(0.6, 0.15, 2.4, 0xbcbcbc, x, 0, 0); g.box(0.5, 1.4, 0.7, 0xe23b2e, x, 0.15, 0); g.box(0.4, 0.4, 0.05, 0x111111, x, 1.0, 0.36); }
-  return g;
-}
-function parkingBooth() {
-  const g = new GB();
-  g.box(1.6, 2.4, 1.6, 0xf0f0f0, 0, 0, 0);
-  g.box(1.3, 0.9, 0.05, GLASS, 0, 1.2, 0.81);
-  g.box(1.9, 0.2, 1.9, 0x2457c5, 0, 2.4, 0);
-  return g;
-}
+function golden() { const g = new GB(); g.rbox(1.2, 1.2, 1.2, 0.3, 0xffd43b, 0, 0.1, 0); g.box(1.25, 0.3, 0.3, 0xff6b6b, 0, 0.55, 0); g.box(0.3, 0.3, 1.25, 0xff6b6b, 0, 0.55, 0); g.sph(0.25, 0xff6b6b, 0, 1.4, 0, 6, 4); return g; }
 
 // ---------- 类型注册 ----------
 export function buildTypes() {
   const T = [];
   const def = (name, gb, cat, opts = {}) => {
-    const geos = gb.build();
-    let bb = new THREE.Box3();
-    for (const k in geos) bb.union(geos[k].boundingBox);
+    const geo = gb.build(); const bb = geo.boundingBox;
     const hw = Math.max(-bb.min.x, bb.max.x), hd = Math.max(-bb.min.z, bb.max.z);
     const fr = opts.fr ?? (Math.max(hw, hd) * 0.85 + Math.min(hw, hd) * 0.25);
-    const h = bb.max.y;
+    const h = opts.h ?? bb.max.y;
     const value = opts.value ?? Math.max(1, Math.round(fr * fr * (1 + Math.min(h, 40) * 0.05) * 1.6));
-    const t = { id: T.length, name, geos, cat, fr, h, value, shadow: opts.shadow ?? true };
+    const t = { id: T.length, name, geo, cat, fr, h, value, pal: opts.pal || PAL.white, blob: opts.blob ?? (cat === 'bld' ? 'sq' : 'rd'), tris: geo.attributes.position.count / 3 };
     T.push(t); return t;
   };
-  const carCols = [0xe23b2e, 0x2b6fd6, 0xf2f2f2, 0x2d2f33, 0x3fae5a, 0xff8a1f, 0x8a4fd1, 0x9aa3ad];
-  const out = { cars: [], big: [], people: [], trees: [], houses: [], shops: [], apts: [], offices: [], skys: [], misc: {} };
-  carCols.forEach(c => out.cars.push(def('sedan', sedan(c), 'car')));
-  [0xe23b2e, 0x1f3a5f, 0xf2f2f2, 0x3fae5a].forEach(c => out.cars.push(def('suv', suv(c), 'car')));
-  out.cars.push(def('taxi', taxi(), 'car'), def('taxi', taxi(), 'car'), def('police', police(), 'car'));
-  out.big.push(def('van', van(0xf2f2f2), 'car'), def('van', van(0x2b6fd6), 'car'), def('truck', truck(0x2b6fd6), 'car'), def('truck', truck(0xe23b2e), 'car'),
-    def('bus', bus(0xf2b705), 'car'), def('bus', bus(0x2a9d8f), 'car'), def('firetruck', fireTruck(), 'car'));
-  out.misc.moto = [def('moto', moto(0xe23b2e), 'small'), def('moto', moto(0x2d2f33), 'small')];
-  const shirts = [0xe63946, 0x457b9d, 0xf4a261, 0x2a9d8f, 0xffffff, 0x8338ec, 0xffbe0b, 0x3a86ff, 0xff006e, 0x6a994e];
-  const pants = [0x1d3557, 0x333333, 0x6b705c, 0x264653, 0x7f5539];
-  const hairs = [0x222222, 0x5a3825, 0xd9a441, 0x8c2f1a, 0x111111];
-  const skins = [0xf1c27d, 0xe0ac69, 0xffdbac, 0xc68642, 0x8d5524];
-  for (let i = 0; i < 10; i++) out.people.push(def('person', person(shirts[i], pants[i % 5], hairs[(i * 3) % 5], skins[(i * 7) % 5]), 'person', { value: 1 }));
-  out.trees.push(def('tree', treeRound(0x4caf50, 0x66c35a), 'tree'), def('tree', treeRound(0x3d9a48, 0x58b04f), 'tree'),
-    def('tree', treeRound(0x8bc34a, 0xa5d65a), 'tree'), def('pine', treePine(0x2e7d4f), 'tree'), def('pine', treePine(0x3b8c5a), 'tree'));
-  out.misc.treeAutumn = def('tree', treeRound(0xf2a541, 0xf6c453), 'tree');
-  out.misc.palm = def('palm', palm(), 'tree');
-  out.misc.bush = [def('bush', bush(0x4f9d46), 'small', { value: 2 }), def('bush', bush(0x6bb34f), 'small', { value: 2 })];
-  out.misc.flower = def('flower', flowerBed(), 'small', { value: 3 });
-  out.misc.lamp = def('lamp', lamp(), 'small', { fr: 0.4, value: 2 });
-  out.misc.bench = def('bench', bench(), 'small', { value: 3 });
-  out.misc.hydrant = def('hydrant', hydrant(), 'small', { value: 1, shadow: false });
-  out.misc.trash = def('trash', trashBin(), 'small', { value: 1 });
-  out.misc.cone = def('cone', cone(), 'small', { value: 1, shadow: false });
-  out.misc.mailbox = def('mailbox', mailbox(), 'small', { value: 1 });
-  out.misc.tlight = def('tlight', trafficLight(), 'small', { fr: 0.6, value: 3 });
-  out.misc.busStop = def('busstop', busStop(), 'mid');
-  out.misc.kiosk = [def('kiosk', kiosk(0xe63946), 'mid'), def('kiosk', kiosk(0x2a9d8f), 'mid')];
-  out.misc.fountain = def('fountain', fountain(), 'mid');
-  out.misc.statue = def('statue', statue(), 'mid');
-  out.misc.bikeRack = def('rack', bikeRack(), 'small', { value: 2 });
-  out.misc.bicycle = [def('bike', bicycle(0x2b6fd6), 'small', { value: 1 }), def('bike', bicycle(0xe23b2e), 'small', { value: 1 })];
-  out.misc.umbrella = [def('umbrella', umbrellaTable(0xe63946), 'small'), def('umbrella', umbrellaTable(0x2a9d8f), 'small')];
-  out.misc.vending = [def('vending', vending(0xe23b2e), 'small'), def('vending', vending(0x2b6fd6), 'small')];
-  out.misc.waterTower = def('watertower', waterTower(), 'mid');
-  out.misc.gas = def('gas', gasStation(), 'big');
-  out.misc.booth = def('booth', parkingBooth(), 'small');
-  [[0xf6e7c1, 0xc0392b], [0xdfe9f3, 0x34495e], [0xf9d5c5, 0x7b4b3a], [0xe3f1dc, 0x8e5a3c], [0xfff3b0, 0x2e6f95]].forEach(([w, r]) => out.houses.push(def('house', house(w, r), 'bld')));
-  [[0xf4d6a0, 0xe63946, 0x1d3557], [0xcde3f0, 0x2a9d8f, 0xe76f51], [0xf1e2f8, 0xff7f11, 0x3a0ca3], [0xe9edc9, 0x3a86ff, 0xd62828]].forEach(([w, a, s]) => out.shops.push(def('shop', shop(w, a, s), 'bld')));
-  [[0xf2c6a0, 0xffffff], [0xc9dde8, 0xf3f3f3], [0xe8d8b8, 0xffffff], [0xd9b8a8, 0xf0e6dc]].forEach(([w, t]) => out.apts.push(def('apartment', apartment(w, t), 'bld')));
-  [[0x7fb3d5, 0xe8e8e8], [0x8fd3c7, 0xdedede], [0xa9b7c6, 0x5d6d7e]].forEach(([g, t]) => out.offices.push(def('office', office(g, t), 'bld')));
-  [[0x6fa8dc, 0xdcdcdc], [0x7ec8c8, 0xeeeeee], [0xd4b483, 0x6b5b45]].forEach(([g, t]) => out.skys.push(def('sky', skyscraper(g, t), 'bld')));
-  [[0x9ec5e8, 0xf0f0f0], [0xa7d7c5, 0x4a4e69]].forEach(([g, t]) => out.skys.push(def('tower', towerSlim(g, t), 'bld')));
-  return { list: T, groups: out };
+  const G = { misc: {} };
+  G.cars = [def('car', car(), 'car', { pal: PAL.car }), def('car', car(), 'car', { pal: PAL.car }), def('suv', suv(), 'car', { pal: PAL.car })];
+  G.cars.push(def('taxi', taxi(), 'car', { pal: [0xffd43b] }), def('police', police(), 'car', { pal: [0xffffff] }));
+  G.big = [def('van', van(), 'car', { pal: PAL.car }), def('truck', truck(), 'car', { pal: PAL.car }), def('bus', bus(), 'car', { pal: [0xffd43b, 0x69db7c, 0x4dabf7, 0xff8787] })];
+  G.moto = def('moto', moto(), 'small', { pal: PAL.car });
+  G.people = [def('person', person(0x4c6ef5, 0x343a40, 0xffd8b5, 0), 'person', { value: 1, pal: PAL.shirt }), def('person', person(0x495057, 0x8d5524, 0xf1c27d, 1), 'person', { value: 1, pal: PAL.shirt }), def('person', person(0x868e96, 0xffd43b, 0xffe0c7, 2), 'person', { value: 1, pal: PAL.shirt })];
+  G.trees = [def('tree', treeRound(), 'tree', { pal: PAL.leaf }), def('pine', treePine(), 'tree', { pal: [0x2f9e44, 0x37b24d, 0x40c057] })];
+  G.misc.autumn = [0xffa94d, 0xffc078, 0xff8787];
+  G.misc.bush = def('bush', bush(), 'small', { value: 2, pal: PAL.leaf });
+  G.misc.flower = def('flower', flowerBed(), 'small', { value: 3 });
+  G.misc.lamp = def('lamp', lamp(), 'small', { fr: 0.4, value: 2 });
+  G.misc.bench = def('bench', bench(), 'small', { value: 3 });
+  G.misc.hydrant = def('hydrant', hydrant(), 'small', { value: 1 });
+  G.misc.trash = def('trash', trashBin(), 'small', { value: 1 });
+  G.misc.cone = def('cone', cone(), 'small', { value: 1 });
+  G.misc.mailbox = def('mailbox', mailbox(), 'small', { value: 1 });
+  G.misc.tlight = def('tlight', tlight(), 'small', { fr: 0.6, value: 3 });
+  G.misc.busStop = def('busstop', busStop(), 'mid', { pal: PAL.awn });
+  G.misc.kiosk = def('kiosk', kiosk(), 'mid', { pal: PAL.awn });
+  G.misc.fountain = def('fountain', fountain(), 'mid');
+  G.misc.statue = def('statue', statue(), 'mid');
+  G.misc.umbrella = def('umbrella', umbrella(), 'small', { pal: PAL.awn });
+  G.misc.vending = def('vending', vending(), 'small', { pal: [0xff6b6b, 0x4dabf7, 0x69db7c] });
+  G.misc.bicycle = def('bike', bicycle(), 'small', { value: 1, pal: PAL.car });
+  G.misc.waterTower = def('watertower', waterTower(), 'mid');
+  G.misc.gas = def('gas', gasStation(), 'bld');
+  G.misc.gift = def('gift', golden(), 'small', { value: 4 });
+  G.houses = [def('house', house(0xff8787), 'bld', { pal: PAL.wall }), def('house', house(0x74c0fc), 'bld', { pal: PAL.wall }), def('house', house(0xffa94d), 'bld', { pal: PAL.wall })];
+  G.shops = [def('shop', shop(0xffe3e3), 'bld', { pal: PAL.awn }), def('shop', shop(0xd0ebff), 'bld', { pal: PAL.awn })];
+  G.apts = [def('apartment', apartment(), 'bld', { pal: PAL.wall })];
+  G.offices = [def('office', office(), 'bld', { pal: PAL.glass })];
+  G.skys = [def('sky', skyscraper(), 'bld', { pal: PAL.glass })];
+  // 叠叠楼
+  G.segs = {};
+  for (const [k, w] of [['S', 4.4], ['M', 6.4], ['L', 9]]) {
+    G.segs[k] = {
+      a: def('seg' + k, segment(w, TILE.seg), 'seg', { pal: PAL.seg, value: Math.max(1, Math.round(w * w * 0.1)), blob: 'none' }),
+      b: def('seg' + k, segment(w, TILE.seg2), 'seg', { pal: PAL.seg, value: Math.max(1, Math.round(w * w * 0.1)), blob: 'none' }),
+      roof: def('segroof' + k, segRoof(w), 'seg', { pal: PAL.seg, value: Math.max(1, Math.round(w * w * 0.12)), blob: 'none' }),
+    };
+  }
+  return { list: T, groups: G };
 }
