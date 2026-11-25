@@ -213,6 +213,8 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0, opts = nul
     for (let k = 0; k < opts.coins; k++) { const rc = pick(roadCenters), a = (R() * 2 - 1) * (HALF - 4); if (R() < 0.5) add(TG.coin, a, rc + (R() - 0.5) * 6, 0); else add(TG.coin, rc + (R() - 0.5) * 6, a, 0); }
     return { objs, lanes, walkers, stacks, blockKinds, seed };
   }
+  // 经典/单人/大逃杀：路上也有金币（攒钱买皮肤）
+  for (let k = 0; k < 12; k++) { const rc = pick(roadCenters), a = (R() * 2 - 1) * (HALF - 4); if (R() < 0.5) add(TG.coin, a, rc + (R() - 0.5) * 6, 0); else add(TG.coin, rc + (R() - 0.5) * 6, a, 0); }
   for (let a = -HALF - 10; a <= HALF + 10; a += 8) for (const s of [-1, 1]) {
     add(pick(G.trees), a + R() * 2, s * (HALF + 10 + R() * 2));
     add(pick(G.trees), s * (HALF + 10 + R() * 2), a + R() * 2);

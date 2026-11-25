@@ -1,6 +1,6 @@
 // 海底模式：发光漩涡在海床上吞噬海洋生物；鱼群会逃跑，水母/大型生物会伤害你；氧气需要靠气泡补充
 import * as THREE from 'three';
-import { GB, makeMaterial } from './models.js?v=4';
+import { GB, makeMaterial } from './models.js?v=5';
 
 const PI = Math.PI, W = 110; // 海床半宽
 let MAT = null, MODELS = null;
@@ -93,14 +93,14 @@ export class SeaWorld {
     this.v = { x: 0, z: 0, vx: 0, vz: 0, r: radiusFor(1), rT: radiusFor(1), level: 1, mass: 0, score: 0, inv: 0, color: new THREE.Color(ctx.playerColor) };
     this.vMat = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false,
-      uniforms: { t: { value: 0 }, col: { value: this.v.color } },
+      uniforms: { t: { value: 0 }, col: { value: this.v.color }, col2: { value: new THREE.Color(ctx.playerColor2 ?? ctx.playerColor) } },
       vertexShader: `varying vec2 p; void main(){ p = position.xz; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.); }`,
-      fragmentShader: `uniform float t; uniform vec3 col; varying vec2 p; void main(){
+      fragmentShader: `uniform float t; uniform vec3 col; uniform vec3 col2; varying vec2 p; void main(){
         float d = length(p); float a = atan(p.y, p.x);
         float sp = sin(a*3. + d*14. - t*7.)*0.5+0.5;
         float core = smoothstep(0.75, 0.0, d);
         float rim = smoothstep(0.8, 1.0, d) * smoothstep(1.12, 1.0, d);
-        vec3 c = mix(col*1.4 + 0.25, vec3(0.0,0.03,0.08), core) + sp*(col*0.9+0.2)*(1.0-core*0.8);
+        vec3 c = mix(col*1.4 + 0.25, vec3(0.0,0.03,0.08), core) + sp*(col2*0.9+0.2)*(1.0-core*0.8);
         c += rim*vec3(1.0)*0.8;
         float al = smoothstep(1.12, 0.98, d) * (0.75 + 0.25*sp);
         gl_FragColor = vec4(c, al); }`
