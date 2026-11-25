@@ -1,10 +1,10 @@
 // 黑洞入侵 · 网页版 v2 —— 主逻辑（城市模式 + 海底模式入口）
 import * as THREE from 'three';
-import { buildTypes, makeMaterial } from './models.js?v=3';
-import { generateCity, buildGround, BOUND, HALF, roadCenters } from './city.js?v=3';
-import { levelDef, LEVEL_COUNT, THEMES } from './levels.js?v=3';
-import { Sfx } from './audio.js?v=3';
-import { SeaWorld } from './sea.js?v=3';
+import { buildTypes, makeMaterial } from './models.js?v=4';
+import { generateCity, buildGround, BOUND, HALF, roadCenters } from './city.js?v=4';
+import { levelDef, LEVEL_COUNT, THEMES } from './levels.js?v=4';
+import { Sfx } from './audio.js?v=4';
+import { SeaWorld } from './sea.js?v=4';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
@@ -93,8 +93,11 @@ let curLevel = 1, lv = null, lvFitK = 1, coins = [], lvCleared = false;
 const COLORS = [0x7b5cff, 0xff4d6d, 0x2ec4b6, 0xffb703, 0x3a86ff, 0x8ac926, 0xff7a1a, 0xf15bb5];
 const AI_NAMES = ['小橘子', '夜行猫', '吞天大王', '西瓜太郎', '闪电侠', '饭团子', '螺蛳粉', '芝士喵', '黑旋风', '奶茶续命', '摸鱼达人', '虚空领主', '小笼包', '咕噜咕噜'];
 const GOLD = new THREE.Color(1.7, 1.25, 0.25);
-const massFor = (L) => 8 * (Math.pow(1.6, L - 1) - 1);
-const MAX_LEVEL = 16;
+// 闯关模式：更快的成长曲线（每级所需经验更少、等级上限更高）
+const LV_H = 8; let LV_MH = 60, LV_K = 3, LV_G = 1.2;   // 前 8 级快速成长（约 15 秒能吃房子），之后按地图标定
+const massFor = (L) => mode === 'level' ? (L <= LV_H ? LV_MH * (Math.pow(1.45, L - 1) - 1) / (Math.pow(1.45, LV_H - 1) - 1) : LV_MH + LV_K * (Math.pow(LV_G, L - LV_H) - 1)) : 8 * (Math.pow(1.6, L - 1) - 1);
+const MAX_LEVEL_STD = 16, MAX_LEVEL_LV = 24;
+let MAX_LEVEL = MAX_LEVEL_STD;
 const radiusFor = (L) => Math.pow(1.225, L - 1);
 
 // ---------------- 空间网格 ----------------
@@ -183,10 +186,11 @@ function compact() {
   const p0 = P[0], p1 = P[1], p2 = P[2], p3 = P[3], p4 = P[4], p5 = P[5];
   for (const m of typeMesh) if (m) m.count = 0;
   let nr = 0, ns = 0; const br = blobRd.instanceMatrix.array, bs = blobSq.instanceMatrix.array;
-  const tinyCull = mode === 'level' && state !== 'menu' ? (camD > 220 ? 0.45 : 0) : camD > 120 ? 1.0 : camD > 75 ? 0.45 : 0;
+  const lvMode = mode === 'level' && state !== 'menu', tinyCull = lvMode ? 0 : camD > 120 ? 1.0 : camD > 75 ? 0.45 : 0, sizeCull = lvMode ? camD * 0.011 : 0;
   for (let i = 0, L = objs.length; i < L; i++) {
     const o = objs[i]; if (o.state === 2 || o.hidden) continue;
     const t = o.t; if (t.fr < tinyCull && t.h < 2.5 && o.state === 0) continue;
+    if (sizeCull > 0 && o.state === 0 && t.fr + t.h * 0.25 < sizeCull && t.cat !== 'coin' && o !== hintO) continue;
     const hh = t.h * 0.5, cx = o.x, cy = o.y + hh, cz = o.z, r = (t.fr > hh ? t.fr : hh) + 0.5;
     if (p0.normal.x * cx + p0.normal.y * cy + p0.normal.z * cz + p0.constant < -r || p1.normal.x * cx + p1.normal.y * cy + p1.normal.z * cz + p1.constant < -r ||
       p2.normal.x * cx + p2.normal.y * cy + p2.normal.z * cz + p2.constant < -r || p3.normal.x * cx + p3.normal.y * cy + p3.normal.z * cz + p3.constant < -r ||
@@ -729,7 +733,7 @@ function startGame() {
     $('modeName').textContent = '海底模式';
   } else {
     if (sea) { sea.dispose(); sea = null; }
-    lv = mode === 'level' ? levelDef(curLevel) : null; lvCleared = false;
+    lv = mode === 'level' ? levelDef(curLevel) : null; lvCleared = false; MAX_LEVEL = lv ? MAX_LEVEL_LV : MAX_LEVEL_STD;
     document.body.classList.toggle('lv', !!lv);
     enterCityVisuals(lv);
     $('cityHud').classList.remove('hidden'); $('seaHud').classList.add('hidden');
@@ -739,6 +743,11 @@ function startGame() {
       timeLeft = lv.time;
       let rc = roadCenters[0]; for (const r of roadCenters) if (Math.abs(r) < Math.abs(rc)) rc = r; player.x = rc; player.z = rc;
       // 视角：洞吃光整张图时的大小，镜头刚好框住整张图
+      // 成长曲线按地图标定：吃光整张图时，洞刚好长到“镜头框住全图”的大小
+      const tan0 = Math.tan(camera.fov * Math.PI / 360), asp0 = Math.min(camera.aspect, 1);
+      const rFit = Math.max(4, (HALF + 9 - 8) / 2.5);
+      const LF = Math.max(8, Math.floor(1 + Math.log(rFit) / Math.log(1.225)));
+      MAX_LEVEL = LF; LV_K = Math.max(1, totalValue * 0.96 - LV_MH) / (Math.pow(LV_G, LF - LV_H) - 1);
       let L = 1; while (L < MAX_LEVEL && totalValue >= massFor(L + 1)) L++;
       const rF = radiusFor(L), tan = Math.tan(camera.fov * Math.PI / 360), asp = Math.min(camera.aspect, 1);
       const stdD = Math.max((8 + rF * 3.3) / tan, (8 + rF * 2.5) / (tan * asp)), fitD = (HALF + 9) / (tan * asp);
@@ -885,6 +894,7 @@ window.__bh = {
   renderer, startGame, step, setMode: (m) => mode = m, setTime: (t) => { timeLeft = t; if (sea) sea.timeLeft = t; },
   get perf() { return { stepMs, renderMs, pr, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, visTris, visCalls }; },
   startLevel, showLevelSel, levelDef, get lvFitK() { return lvFitK; }, get timeLeft() { return timeLeft; }, get coins() { return coins; },
+  setGrowth: (k, g) => { LV_MH = k; LV_G = g; }, get maxFr() { let m = 0; for (const o of objs) if (o.t.cat !== 'coin' && o.t.fr > m) m = o.t.fr; return m; },
   get total() { return totalValue; }, get eaten() { return eatenValue / totalValue; }, get combo() { return comboBest; },
 };
 showMenu();

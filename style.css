@@ -6,7 +6,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#1b1430;font-family:
 .label{position:absolute;left:0;top:0;white-space:nowrap;font-weight:800;font-size:13px;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.45);text-shadow:0 1px 2px #000;will-change:transform}
 .label.me{background:rgba(255,255,255,.9);color:#222;text-shadow:none}
 .label .crown{margin-right:2px}
-.pop{position:absolute;left:0;top:0;font-weight:900;font-size:20px;color:#fff;text-shadow:0 2px 0 #6b2fd6,0 0 6px rgba(0,0,0,.5);animation:pop .8s ease-out forwards;will-change:transform,opacity}
+.pop{position:absolute;left:0;top:0;font-weight:900;font-size:20px;color:#fff;text-shadow:0 2px 0 #6b2fd6,0 0 6px rgba(0,0,0,.5);animation:pop .8s ease-out forwards}
 @keyframes pop{0%{opacity:0;margin-top:0;scale:.6}15%{opacity:1;scale:1.15}100%{opacity:0;margin-top:-60px;scale:1}}
 #hud{position:fixed;inset:0;pointer-events:none}
 #topbar{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
