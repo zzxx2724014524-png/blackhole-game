@@ -1,0 +1,83 @@
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{width:100%;height:100%;overflow:hidden;background:#1b1430;font-family:-apple-system,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",sans-serif;color:#fff;user-select:none;-webkit-user-select:none;touch-action:none;overscroll-behavior:none}
+#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hidden{display:none!important}
+#labels,#pops{position:fixed;inset:0;pointer-events:none;overflow:hidden}
+.label{position:absolute;left:0;top:0;white-space:nowrap;font-weight:800;font-size:13px;padding:2px 8px;border-radius:10px;background:rgba(0,0,0,.45);text-shadow:0 1px 2px #000;will-change:transform}
+.label.me{background:rgba(255,255,255,.9);color:#222;text-shadow:none}
+.label .crown{margin-right:2px}
+.pop{position:absolute;left:0;top:0;font-weight:900;font-size:20px;color:#fff;text-shadow:0 2px 0 #6b2fd6,0 0 6px rgba(0,0,0,.5);animation:pop .8s ease-out forwards;will-change:transform,opacity}
+@keyframes pop{0%{opacity:0;margin-top:0;scale:.6}15%{opacity:1;scale:1.15}100%{opacity:0;margin-top:-60px;scale:1}}
+#hud{position:fixed;inset:0;pointer-events:none}
+#topbar{position:absolute;top:calc(env(safe-area-inset-top) + 10px);left:10px;right:10px;display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+#lvl{position:relative;width:56px;height:56px;flex:none}
+#lvl svg{width:100%;height:100%;transform:rotate(-90deg)}
+#lvl circle{fill:rgba(0,0,0,.45);stroke-width:5}
+#lvl .bg{stroke:rgba(255,255,255,.25)}
+#lvl .fg{fill:none;stroke:#ffd23f;stroke-linecap:round;stroke-dasharray:125.6;stroke-dashoffset:125.6;transition:stroke-dashoffset .25s}
+#lvlNum{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:20px;text-shadow:0 2px 2px #000}
+#lvlNum::before{content:"Lv";font-size:10px;margin-right:1px;opacity:.85}
+#timerBox{text-align:center;flex:1}
+#timer{font-size:30px;font-weight:900;letter-spacing:1px;text-shadow:0 2px 0 rgba(0,0,0,.45),0 0 8px rgba(0,0,0,.3)}
+#timer.warn{color:#ff5a5a;animation:blink .5s infinite alternate}
+@keyframes blink{to{transform:scale(1.12)}}
+#modeName{font-size:11px;opacity:.85;text-shadow:0 1px 2px #000}
+#lb{min-width:128px;max-width:42vw;background:rgba(20,14,40,.55);border-radius:12px;padding:6px 8px;font-size:12px;backdrop-filter:blur(4px)}
+#lb div{display:flex;gap:5px;align-items:center;line-height:19px}
+#lb div i{width:10px;height:10px;border-radius:50%;flex:none;border:1.5px solid rgba(255,255,255,.7)}
+#lb div span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#lb div b{font-variant-numeric:tabular-nums}
+#lb div.me{color:#ffd23f}
+#lb div.dead{opacity:.45}
+#solo{position:absolute;top:calc(env(safe-area-inset-top) + 76px);left:50%;transform:translateX(-50%);width:200px;text-align:center;font-size:13px;font-weight:700;text-shadow:0 1px 2px #000}
+#solo .bar{height:8px;background:rgba(0,0,0,.4);border-radius:4px;margin-top:3px;overflow:hidden}
+#solo .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffd23f,#ff7a1a)}
+#feed{position:absolute;left:10px;top:calc(env(safe-area-inset-top) + 76px);display:flex;flex-direction:column;gap:4px}
+#feed div{background:rgba(0,0,0,.5);padding:3px 8px;border-radius:8px;font-size:12px;animation:feed 3.5s forwards}
+@keyframes feed{0%{opacity:0;transform:translateX(-20px)}8%{opacity:1;transform:none}85%{opacity:1}100%{opacity:0}}
+#btns{position:absolute;right:10px;bottom:calc(env(safe-area-inset-bottom) + 12px);display:flex;gap:8px;pointer-events:auto}
+#btns button{width:42px;height:42px;border-radius:50%;border:none;background:rgba(0,0,0,.45);color:#fff;font-size:18px}
+#score{position:absolute;left:50%;bottom:calc(env(safe-area-inset-bottom) + 14px);transform:translateX(-50%);font-size:26px;font-weight:900;text-shadow:0 2px 0 rgba(0,0,0,.4)}
+#score small{font-size:13px;margin-left:3px}
+#joy{position:fixed;left:0;top:0;width:120px;height:120px;margin:-60px 0 0 -60px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);pointer-events:none;will-change:transform}
+#joyKnob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;background:rgba(255,255,255,.55);box-shadow:0 2px 8px rgba(0,0,0,.3);will-change:transform}
+.screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(27,20,48,.25),rgba(27,20,48,.7))}
+.panel{width:min(420px,100%);max-height:100%;overflow:auto;background:rgba(24,17,46,.82);border:1px solid rgba(255,255,255,.12);border-radius:22px;padding:22px 20px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45);backdrop-filter:blur(8px)}
+.panel.small{width:min(300px,100%)}
+.logo{display:flex;align-items:center;justify-content:center;gap:10px}
+.logo .hole{width:54px;height:54px;border-radius:50%;background:radial-gradient(circle at 50% 45%,#000 55%,#2a1e55 70%,#7b5cff 76%,transparent 79%);box-shadow:0 0 24px #7b5cff88;animation:spin 6s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+h1{font-size:44px;font-weight:900;letter-spacing:2px;background:linear-gradient(180deg,#fff,#c9b8ff);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 3px 0 #4b2ea8)}
+h1 b{background:linear-gradient(180deg,#ffe066,#ff8a1f);-webkit-background-clip:text;background-clip:text}
+h2{font-size:30px;font-weight:900;margin-bottom:10px}
+.sub{opacity:.8;margin:6px 0 14px;font-size:14px}
+.name{display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px;margin-bottom:10px}
+.name input{width:150px;padding:8px 12px;border-radius:12px;border:2px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:16px;text-align:center;outline:none}
+.skins{display:flex;justify-content:center;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.skins button{width:32px;height:32px;border-radius:50%;border:3px solid transparent;background:#000;box-shadow:inset 0 0 0 4px var(--c)}
+.skins button.active{border-color:#fff;transform:scale(1.12)}
+.modes{display:grid;gap:8px;margin-bottom:14px}
+.mode{display:flex;flex-direction:column;align-items:flex-start;padding:10px 14px;border-radius:14px;border:2px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;text-align:left}
+.mode b{font-size:16px}.mode span{font-size:12px;opacity:.7}
+.mode.active{border-color:#ffd23f;background:rgba(255,210,63,.14)}
+button{font-family:inherit;cursor:pointer}
+.big{width:100%;padding:14px;border:none;border-radius:16px;font-size:20px;font-weight:900;color:#2a1600;background:linear-gradient(180deg,#ffe066,#ffa62b);box-shadow:0 5px 0 #c46d00;letter-spacing:2px}
+.big:active{transform:translateY(3px);box-shadow:0 2px 0 #c46d00}
+.ghost{margin-top:10px;width:100%;padding:11px;border-radius:14px;border:2px solid rgba(255,255,255,.25);background:transparent;color:#fff;font-size:15px}
+.tip{font-size:12px;opacity:.6;margin-top:12px}
+#count{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:110px;font-weight:900;pointer-events:none;text-shadow:0 6px 0 #4b2ea8,0 0 30px rgba(0,0,0,.5)}
+#count.anim{animation:cnt .9s ease-out}
+@keyframes cnt{0%{transform:scale(2);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.8);opacity:.2}}
+#dead{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;background:rgba(0,0,0,.25)}
+#dead div{display:flex;flex-direction:column;align-items:center;gap:6px;background:rgba(0,0,0,.6);padding:16px 26px;border-radius:16px}
+#dead b{font-size:22px}
+#myRank{font-size:16px;margin-bottom:10px;opacity:.9}
+#rankList{list-style:none;margin-bottom:16px;text-align:left}
+#rankList li{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:12px;margin-bottom:5px;background:rgba(255,255,255,.06);font-size:15px}
+#rankList li.me{background:rgba(255,210,63,.2);border:1px solid #ffd23f}
+#rankList li .r{width:28px;font-weight:900;text-align:center;font-size:17px}
+#rankList li i{width:14px;height:14px;border-radius:50%;flex:none;border:2px solid #fff}
+#rankList li span{flex:1}
+#rankList li b{font-variant-numeric:tabular-nums}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#1b1430;font-size:18px;z-index:9}
+@media (max-width:480px){#timer{font-size:26px}#lb{font-size:11px;min-width:112px}h1{font-size:38px}}

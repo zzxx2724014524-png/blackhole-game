@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#1b1430">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%23000%22 stroke=%22%237b5cff%22 stroke-width=%223%22/%3E%3C/svg%3E">
+<title>黑洞入侵 · 网页版</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">{"imports":{"three":"./lib/three.module.js"}}</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div id="pops"></div>
+
+<div id="hud" class="hidden">
+  <div id="topbar">
+    <div id="lvl">
+      <svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="20" class="bg"/><circle id="lvlArc" cx="24" cy="24" r="20" class="fg"/></svg>
+      <div id="lvlNum">1</div>
+    </div>
+    <div id="timerBox"><div id="timer">2:00</div><div id="modeName">经典模式</div></div>
+    <div id="lb"></div>
+  </div>
+  <div id="solo" class="hidden"><div id="soloTxt">城市吞噬 0%</div><div class="bar"><i id="soloBar"></i></div></div>
+  <div id="feed"></div>
+  <div id="btns"><button id="muteBtn" title="声音">🔊</button><button id="pauseBtn" title="暂停">⏸</button></div>
+  <div id="score"><span id="myScore">0</span><small>分</small></div>
+</div>
+
+<div id="joy" class="hidden"><div id="joyKnob"></div></div>
+
+<div id="menu" class="screen">
+  <div class="panel">
+    <div class="logo"><span class="hole"></span><h1>黑洞<b>入侵</b></h1></div>
+    <p class="sub">吞噬整座城市，成为最大的黑洞！</p>
+    <label class="name">昵称 <input id="nameInput" maxlength="8" value="鸭鸭"></label>
+    <div class="skins" id="skins"></div>
+    <div class="modes">
+      <button class="mode active" data-mode="classic"><b>经典模式</b><span>2分钟 · 吃得最多者胜</span></button>
+      <button class="mode" data-mode="battle"><b>大逃杀</b><span>只有一条命 · 活到最后</span></button>
+      <button class="mode" data-mode="solo"><b>单人模式</b><span>2分钟 · 吞掉尽量多的城市</span></button>
+    </div>
+    <button id="startBtn" class="big">开始游戏</button>
+    <p class="tip" id="tip">手机：按住屏幕拖动 · 电脑：鼠标移动 / WASD / 方向键</p>
+  </div>
+</div>
+
+<div id="count" class="hidden"></div>
+<div id="dead" class="hidden"><div><b id="deadBy">你被吞掉了！</b><span id="deadT">3 秒后复活</span></div></div>
+<div id="paused" class="screen hidden"><div class="panel small"><h2>已暂停</h2><button id="resumeBtn" class="big">继续</button><button id="quitBtn" class="ghost">返回主页</button></div></div>
+
+<div id="over" class="screen hidden">
+  <div class="panel">
+    <h2 id="overTitle">时间到！</h2>
+    <div id="myRank"></div>
+    <ol id="rankList"></ol>
+    <button id="againBtn" class="big">再来一局</button>
+    <button id="homeBtn" class="ghost">返回主页</button>
+  </div>
+</div>
+<div id="loading">城市建造中…</div>
+<script type="module" src="js/game.js"></script>
+</body>
+</html>
