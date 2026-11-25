@@ -38,14 +38,15 @@ const SUFFIX = ['', '·清晨', '·午后', '·黄昏', '·假日'];
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
 // 由模拟标定的过关时间（秒，自动驾驶清图用时 × 宽裕系数；见 README）
-export const LEVEL_TIME = [130, 115, 100, 90, 200, 165, 170, 230, 155, 180, 190, 180, 155, 150, 330, 235, 280, 265, 230, 270, 230, 290, 195, 265, 300, 200, 220, 205, 220, 180, 360, 270, 235, 275, 280, 290, 200, 325, 260, 190, 285, 200, 305, 355, 260, 235, 220, 235, 195, 255];
+export const LEVEL_TIME_V3 = [130, 115, 100, 90, 200, 165, 170, 230, 155, 180, 190, 180, 155, 150, 330, 235, 280, 265, 230, 270, 230, 290, 195, 265, 300, 200, 220, 205, 220, 180, 360, 270, 235, 275, 280, 290, 200, 325, 260, 190, 285, 200, 305, 355, 260, 235, 220, 235, 195, 255];
 
+export const LEVEL_TIME = [120, 120, 120, 130, 155, 170, 185, 150, 165, 185, 155, 150, 160, 175, 125, 210, 125, 155, 190, 150, 175, 150, 180, 145, 155, 180, 195, 185, 150, 145, 175, 190, 205, 170, 230, 180, 205, 160, 200, 225, 170, 240, 160, 180, 195, 190, 195, 205, 240, 195];
 export const LEVEL_COUNT = 50;
 export function levelDef(i) {
   const R = rng(i * 7919 + 13);
   const themeKey = i <= 12 ? ORDER[i - 1] : ORDER[(i * 5 + ((i / 12) | 0)) % ORDER.length];
   const theme = THEMES[themeKey];
-  const n = i <= 4 ? 1 : i <= 14 ? 2 : i <= 30 ? 3 : 4;
+  const n = i <= 3 ? 2 : i <= 15 ? 3 : i <= 30 ? 4 : i <= 45 ? 5 : 6;
   const diff = Math.min(1, (i - 1) / 45);
   // 街区类型：按主题权重抽取；前期去掉高楼类
   const entries = Object.entries(theme.kinds);
@@ -60,8 +61,8 @@ export function levelDef(i) {
   const main = entries.slice().sort((a, b) => b[1] - a[1])[0][0];
   if (!kinds.includes(main)) kinds[(R() * kinds.length) | 0] = main;
   const target = Math.round(Math.min(90, 60 + i * 0.6));
-  const coins = 3 + Math.min(7, Math.floor(i / 6));
-  const time = LEVEL_TIME[i - 1] || Math.round(45 + n * n * 22);
+  const coins = 4 + Math.min(8, Math.floor(i / 5));
+  const time = LEVEL_TIME[i - 1] || 180;
   const name = `${theme.name}${i > 12 ? SUFFIX[(i / 12) | 0] || '' : ''}`;
-  return { i, themeKey, theme, n, diff, kinds, seed: i * 104729 + 7, target, coins, time, name };
+  return { i, themeKey, theme, n, diff, kinds, dense: 1 + Math.min(0.6, i / 60), seed: i * 104729 + 7, target, coins, time, name };
 }

@@ -1,6 +1,6 @@
 // 海底模式：发光漩涡在海床上吞噬海洋生物；鱼群会逃跑，水母/大型生物会伤害你；氧气需要靠气泡补充
 import * as THREE from 'three';
-import { GB, makeMaterial } from './models.js?v=3';
+import { GB, makeMaterial } from './models.js?v=4';
 
 const PI = Math.PI, W = 110; // 海床半宽
 let MAT = null, MODELS = null;

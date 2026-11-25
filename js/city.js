@@ -143,6 +143,21 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0, opts = nul
       peopleIdle(3, 12);
     }
     if (TH.snow && (kind === 'suburb' || kind === 'park' || kind === 'plaza' || kind === 'mid')) { for (let k = 0; k < 2; k++) put(TG.snowman, (R() * 2 - 1) * 12, (R() * 2 - 1) * 12, R() * 6.28); if (kind === 'park') put(TG.igloo, 8, 8, -Math.PI * 0.75); }
+    if (opts) {
+      // v4：加密填充，吃起来更爽
+      const D = opts.dense || 1, sc = (k) => Math.round(k * D);
+      const scatter = (list, k, r = 13.5, keep = 0) => { for (let q = 0; q < sc(k); q++) { const lx = (R() * 2 - 1) * r, lz = (R() * 2 - 1) * r; if (keep && Math.abs(lx) < keep && Math.abs(lz) < keep) continue; put(pick(list), lx, lz, R() * 6.28); } };
+      if (kind === 'park') scatter([M.bush, M.flower, G.trees[0], M.bench, ...G.people], 14, 13.5, 6.5);
+      else if (kind === 'farm') { scatter([TG.hay, TG.cow, TG.crop, TG.crop], 10, 13); scatter(G.people, 3); }
+      else if (kind === 'beach') { scatter([TG.ball, ...G.people, M.umbrella, TG.palm], 12, 13); }
+      else if (kind === 'desert') scatter([TG.cactus, TG.rock, TG.cactus], 12, 13);
+      else if (kind === 'plaza' || kind === 'market') scatter([...G.people, M.trash, M.flower, M.umbrella], 10, 13);
+      else if (kind === 'parking') scatter(G.people, 6);
+      else if (kind === 'harbor' || kind === 'industrial') { scatter([M.cone, M.trash, ...G.people], 8, 13); }
+      else if (kind === 'stacks' || kind === 'downtown' || kind === 'mid') scatter([...G.people, M.trash, M.bench], 4, 2);
+      else scatter([...G.people, M.bush, M.trash], 4, 1.5);
+      for (let q = 0; q < sc(8); q++) { const a = R() * 4 | 0, along = (R() * 2 - 1) * 15, off = 15.8 + R() * 1.2; const lx = a === 0 ? along : a === 1 ? off : a === 2 ? -along : -off, lz = a === 0 ? off : a === 1 ? -along : a === 2 ? -off : along; put(pick(G.people), lx, lz, R() * 6.28); }
+    }
     const S = 17.2;
     const street = TH.street !== false;
     for (let side = 0; side < 4; side++) {
@@ -171,7 +186,7 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0, opts = nul
   const named = { van: G.big[0], truck: G.big[1], bus: G.big[2], car: G.cars[0], suv: G.cars[2], taxi: G.cars[3] };
   const laneT = TH.laneTypes ? TH.laneTypes.map(k => TG[k] || named[k]).filter(Boolean) : null;
   for (let k = 0; k <= N; k++) for (let b = 0; b < N; b++) for (const s of [-1, 1]) {
-    if (R() < 1 - (TH.parked ?? 0.5)) continue;
+    if (R() < 1 - (opts ? Math.max(0.7, TH.parked ?? 0.5) : 0.5)) continue;
     const rc = roadCenters[k], bc = blockCenters[b];
     const cnt = 1 + ((R() * 3) | 0);
     for (let c = 0; c < cnt; c++) {

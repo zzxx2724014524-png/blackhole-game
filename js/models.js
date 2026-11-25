@@ -1,7 +1,7 @@
 // v2 原创可爱风低多边形模型：顶点色 + 实例染色(tint) + 程序生成贴图图集（立面窗户）
 import * as THREE from 'three';
 import { mergeGeometries } from '../lib/BufferGeometryUtils.js';
-import { RoundedBoxGeometry } from '../lib/RoundedBoxGeometry.js?v=3';
+import { RoundedBoxGeometry } from '../lib/RoundedBoxGeometry.js?v=4';
 
 const PI = Math.PI;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
