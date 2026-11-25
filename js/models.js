@@ -1,7 +1,7 @@
 // v2 原创可爱风低多边形模型：顶点色 + 实例染色(tint) + 程序生成贴图图集（立面窗户）
 import * as THREE from 'three';
 import { mergeGeometries } from '../lib/BufferGeometryUtils.js';
-import { RoundedBoxGeometry } from '../lib/RoundedBoxGeometry.js?v=2';
+import { RoundedBoxGeometry } from '../lib/RoundedBoxGeometry.js?v=3';
 
 const PI = Math.PI;
 const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _e = new THREE.Euler(), _p = new THREE.Vector3(), _s = new THREE.Vector3(), _c = new THREE.Color();
@@ -311,6 +311,25 @@ function segRoof(w) {
 }
 function golden() { const g = new GB(); g.rbox(1.2, 1.2, 1.2, 0.3, 0xffd43b, 0, 0.1, 0); g.box(1.25, 0.3, 0.3, 0xff6b6b, 0, 0.55, 0); g.box(0.3, 0.3, 1.25, 0xff6b6b, 0, 0.55, 0); g.sph(0.25, 0xff6b6b, 0, 1.4, 0, 6, 4); return g; }
 
+
+// ---------- v3 主题模型（闯关）----------
+function palm() { const g = new GB(); for (let i = 0; i < 5; i++) g.cylC(0.2 - i * 0.02, 0.22 - i * 0.02, 0.9, 0xc69c6d, i * 0.12, 0.45 + i * 0.85, 0, 0, 0, -0.12, 6); for (let k = 0; k < 6; k++) { const a = k / 6 * PI * 2; g.add(new THREE.BoxGeometry(0.5, 0.08, 2.0), WHITE, 0.6 + Math.cos(a) * 0.9, 4.3, Math.sin(a) * 0.9, 0.35, -a + PI / 2, 0, 1, 1, 1, T1); } g.sph(0.2, 0x8d6e63, 0.5, 4.15, 0.15, 6, 4); g.sph(0.2, 0x8d6e63, 0.7, 4.1, -0.15, 6, 4); return g; }
+function cactus() { const g = new GB(); g.rbox(0.7, 2.6, 0.7, 0.3, WHITE, 0, 0, 0, T1); g.rbox(0.45, 1.1, 0.45, 0.2, WHITE, 0.6, 0.9, 0, T1); g.rbox(0.45, 0.4, 0.45, 0.15, WHITE, 0.4, 0.9, 0, T1); g.rbox(0.45, 0.9, 0.45, 0.2, WHITE, -0.6, 1.3, 0, T1); g.rbox(0.45, 0.4, 0.45, 0.15, WHITE, -0.4, 1.3, 0, T1); g.ico(0.18, 0xff8cc6, 0, 2.65, 0); return g; }
+function snowman() { const g = new GB(); g.sph(0.75, 0xf8f9fa, 0, 0.7, 0, 10, 8); g.sph(0.52, 0xf8f9fa, 0, 1.75, 0, 10, 8); g.sph(0.38, 0xf8f9fa, 0, 2.5, 0, 10, 8); g.add(new THREE.ConeGeometry(0.08, 0.45, 6), 0xff922b, 0, 2.5, 0.55, PI / 2, 0, 0); for (const x of [-0.13, 0.13]) g.sph(0.06, 0x212529, x, 2.62, 0.33, 6, 4); g.cyl(0.42, 0.42, 0.08, WHITE, 0, 2.78, 0, 10, T1); g.cyl(0.28, 0.3, 0.45, WHITE, 0, 2.82, 0, 10, T1); g.cylC(0.4, 0.4, 0.18, WHITE, 0, 2.15, 0, 0, 0, 0, 10, T1); return g; }
+function haybale() { const g = new GB(); g.cylC(0.8, 0.8, 1.3, 0xf2c94c, 0, 0.8, 0, 0, 0, PI / 2, 12); for (const x of [-0.66, 0.66]) g.cylC(0.6, 0.6, 0.02, 0xe0b23b, x, 0.8, 0, 0, 0, PI / 2, 12); return g; }
+function cow() { const g = new GB(); for (const [x, z] of [[-0.35, -0.6], [0.35, -0.6], [-0.35, 0.6], [0.35, 0.6]]) g.rbox(0.22, 0.6, 0.22, 0.08, 0xf8f9fa, x, 0, z); g.rbox(1.0, 0.75, 1.7, 0.3, 0xf8f9fa, 0, 0.55, 0); g.rbox(0.5, 0.4, 0.5, 0.15, 0x343a40, 0.2, 0.9, -0.2); g.rbox(0.4, 0.3, 0.6, 0.12, 0x343a40, -0.25, 0.75, 0.45); g.rbox(0.62, 0.62, 0.62, 0.22, 0xf8f9fa, 0, 0.95, 1.05); g.rbox(0.5, 0.28, 0.2, 0.1, 0xffc9c9, 0, 0.95, 1.38); for (const x of [-0.22, 0.22]) { g.sph(0.06, 0x212529, x, 1.35, 1.35, 6, 4); g.cone(0.06, 0.22, 0xfff3bf, x, 1.5, 1.0, 5); } return g; }
+function tractor() { const g = new GB(); for (const s of [-1, 1]) { g.cylC(0.75, 0.75, 0.45, TIRE, s * 0.85, 0.75, -0.7, 0, 0, PI / 2, 12); g.cylC(0.42, 0.42, 0.35, TIRE, s * 0.75, 0.42, 1.1, 0, 0, PI / 2, 10); g.cylC(0.35, 0.35, 0.5, 0xffd43b, s * 0.85, 0.75, -0.7, 0, 0, PI / 2, 8); } g.rbox(1.1, 0.8, 2.4, 0.2, WHITE, 0, 0.6, 0.3, T1); g.rbox(1.2, 1.2, 1.1, 0.12, WHITE, 0, 1.3, -0.6, T1); g.box(1.0, 0.7, 0.9, 0xcfe9ff, 0, 1.6, -0.6); g.box(1.3, 0.1, 1.2, WHITE, 0, 2.5, -0.6, T1); g.cyl(0.08, 0.08, 0.8, DGREY, 0.3, 1.4, 0.9, 6); return g; }
+function boat() { const g = new GB(); g.rbox(2.2, 1.0, 5.2, 0.45, WHITE, 0, 0, 0, T1); g.add(new THREE.ConeGeometry(1.15, 1.6, 4), WHITE, 0, 0.5, 3.0, PI / 2, PI / 4, 0, 1, 1, 0.7, T1); g.box(2.0, 0.08, 5.0, 0xd9a066, 0, 1.0, 0); g.rbox(1.4, 1.1, 1.6, 0.2, 0xf8f9fa, 0, 1.05, -0.8, { tile: TILE.bus, cw: 0.8, ch: 1.1 }); g.box(1.5, 0.12, 1.7, 0xff6b6b, 0, 2.15, -0.8); g.cyl(0.06, 0.06, 2.2, GREY, 0, 2.2, -0.8, 5); return g; }
+function container() { const g = new GB(); g.box(2.4, 2.4, 6, WHITE, 0, 0, 0, T1); for (let i = 0; i < 9; i++) for (const s of [-1, 1]) g.box(0.08, 2.2, 0.18, 0xe9ecef, s * 1.22, 0.1, -2.6 + i * 0.65); g.box(2.3, 2.2, 0.06, 0xe9ecef, 0, 0.1, 3.02); return g; }
+function crane() { const g = new GB(); for (const [x, z] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]]) g.box(0.4, 9, 0.4, 0xffa94d, x, 0, z); g.box(4.0, 0.5, 4.0, 0xffa94d, 0, 9, 0); g.box(1.2, 0.8, 12, 0xff922b, 0, 9.5, 2.5); g.rbox(2.0, 1.6, 2.0, 0.2, 0xf8f9fa, 0, 10.3, -2.5, { tile: TILE.bus, cw: 1, ch: 1.6 }); g.box(0.06, 4, 0.06, DGREY, 0, 5.5, 7.5); g.box(0.9, 0.3, 0.9, 0xffd43b, 0, 5.3, 7.5); return g; }
+function sandcastle() { const g = new GB(); const S = 0xf4d58d; g.box(2.6, 0.8, 2.6, S, 0, 0, 0); for (const [x, z] of [[-1.1, -1.1], [1.1, -1.1], [-1.1, 1.1], [1.1, 1.1]]) { g.cyl(0.45, 0.5, 1.6, S, x, 0, z, 8); g.cone(0.5, 0.6, 0xe8c170, x, 1.6, z, 8); } g.cyl(0.65, 0.75, 2.2, S, 0, 0, 0, 8); g.cone(0.75, 0.9, 0xe8c170, 0, 2.2, 0, 8); g.box(0.04, 0.6, 0.04, DGREY, 0, 3.1, 0); g.box(0.4, 0.25, 0.03, 0xff6b6b, 0.2, 3.45, 0); return g; }
+function beachBall() { const g = new GB(); g.sph(0.5, 0xffffff, 0, 0.5, 0, 10, 8); g.add(new THREE.SphereGeometry(0.505, 10, 8, 0, PI / 2), 0xff6b6b, 0, 0.5, 0); g.add(new THREE.SphereGeometry(0.505, 10, 8, PI, PI / 2), 0x4dabf7, 0, 0.5, 0); g.add(new THREE.SphereGeometry(0.505, 10, 8, PI / 2, PI / 2), 0xffd43b, 0, 0.5, 0); return g; }
+function rock() { const g = new GB(); g.ico(1.0, WHITE, 0, 0.6, 0, 1.3, 0.8, 1, T1); g.ico(0.6, WHITE, 0.9, 0.35, 0.4, 1, 0.8, 1, T1); return g; }
+function crop() { const g = new GB(); for (let i = 0; i < 3; i++) { g.cyl(0.04, 0.05, 0.9, 0x69db7c, -0.5 + i * 0.5, 0, 0, 4); g.ico(0.22, WHITE, -0.5 + i * 0.5, 0.95, 0, 0.8, 1.3, 0.8, T1); g.ico(0.18, 0x8ce99a, -0.42 + i * 0.5, 0.5, 0.08, 1.4, 0.5, 0.7); } return g; }
+function coin() { const g = new GB(); g.cylC(0.75, 0.75, 0.22, 0xffd43b, 0, 1.0, 0, PI / 2, 0, 0, 16); g.cylC(0.55, 0.55, 0.26, 0xfab005, 0, 1.0, 0, PI / 2, 0, 0, 16); g.box(0.16, 0.6, 0.3, 0xfff3bf, 0, 0.7, 0); return g; }
+function iglooHut() { const g = new GB(); g.add(new THREE.SphereGeometry(2.4, 12, 6, 0, PI * 2, 0, PI / 2), 0xf1f8ff, 0, 0, 0); g.cylC(0.9, 0.9, 1.6, 0xe7f1fb, 0, 0.8, 2.2, PI / 2, 0, 0, 10); g.cylC(0.6, 0.6, 1.7, 0x5c7cfa, 0, 0.6, 2.25, PI / 2, 0, 0, 10); return g; }
+function stall() { const g = new GB(); g.rbox(3.0, 1.0, 1.6, 0.1, 0xd9a066, 0, 0, 0); for (const [x, z] of [[-1.4, -0.7], [1.4, -0.7], [-1.4, 0.7], [1.4, 0.7]]) g.box(0.1, 2.4, 0.1, 0xb08968, x, 0, z); g.box(3.4, 0.25, 2.0, WHITE, 0, 2.4, 0, { tile: TILE.awning, cw: 1.7, ch: 0.25 }); g.add(new THREE.BoxGeometry(3.4, 0.08, 2.1), WHITE, 0, 2.7, 0, 0, 0, 0, 1, 1, 1, T1); const cs = [0xff6b6b, 0xffd43b, 0x69db7c, 0xff922b]; for (let i = 0; i < 6; i++) g.ico(0.22, cs[i % 4], -1.1 + (i % 3) * 1.1, 1.15, i < 3 ? -0.3 : 0.3); return g; }
+
 // ---------- 类型注册 ----------
 export function buildTypes() {
   const T = [];
@@ -355,6 +374,26 @@ export function buildTypes() {
   G.apts = [def('apartment', apartment(), 'bld', { pal: PAL.wall })];
   G.offices = [def('office', office(), 'bld', { pal: PAL.glass })];
   G.skys = [def('sky', skyscraper(), 'bld', { pal: PAL.glass })];
+  // v3 主题
+  G.theme = {
+    palm: def('palm', palm(), 'tree', { pal: [0x51cf66, 0x40c057, 0x82c91e] }),
+    cactus: def('cactus', cactus(), 'tree', { pal: [0x51cf66, 0x2f9e44, 0x66a80f] }),
+    snowman: def('snowman', snowman(), 'small', { value: 3, pal: [0xff6b6b, 0x4dabf7, 0x69db7c, 0xb197fc] }),
+    hay: def('hay', haybale(), 'small', { value: 4 }),
+    cow: def('cow', cow(), 'person', { value: 4 }),
+    tractor: def('tractor', tractor(), 'car', { pal: [0xff6b6b, 0x69db7c, 0x4dabf7] }),
+    boat: def('boat', boat(), 'car', { pal: [0xffffff, 0x74c0fc, 0xffd43b, 0xff8787] }),
+    container: def('container', container(), 'mid', { pal: [0xff6b6b, 0x4dabf7, 0x69db7c, 0xffa94d, 0xb197fc, 0x3bc9db] }),
+    crane: def('crane', crane(), 'bld', { fr: 4.2, blob: 'sq' }),
+    sandcastle: def('sandcastle', sandcastle(), 'small', { value: 5 }),
+    ball: def('ball', beachBall(), 'small', { value: 1 }),
+    rock: def('rock', rock(), 'small', { pal: [0xced4da, 0xadb5bd, 0xe9d8a6] }),
+    crop: def('crop', crop(), 'small', { value: 1, pal: [0xffd43b, 0xff922b, 0x69db7c] }),
+    igloo: def('igloo', iglooHut(), 'mid'),
+    stall: def('stall', stall(), 'mid', { pal: PAL.awn }),
+    coin: def('coin', coin(), 'coin', { value: 0, fr: 0.8, blob: 'rd' }),
+  };
+  G.barn = def('barn', house(0xc92a2a), 'bld', { pal: [0xff8787, 0xfa5252] });
   // 叠叠楼
   G.segs = {};
   for (const [k, w] of [['S', 4.4], ['M', 6.4], ['L', 9]]) {

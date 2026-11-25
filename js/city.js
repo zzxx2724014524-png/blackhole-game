@@ -1,34 +1,45 @@
-// 城市生成：道路网格 + 街区 + 物件布置
+// 城市生成：道路网格 + 街区 + 物件布置（v3：可变尺寸 + 主题，用于闯关）
 import * as THREE from 'three';
 
-export const N = 6, BLOCK = 30, SW = 3, ROAD = 12, CELL = BLOCK + 2 * SW + ROAD; // 48
-export const HALF = N * CELL / 2;            // 道路中心外沿 = 144
-export const BOUND = HALF + ROAD / 2 + 4;    // 黑洞活动边界
-export const roadCenters = []; for (let k = 0; k <= N; k++) roadCenters.push(-HALF + k * CELL);
-export const blockCenters = []; for (let k = 0; k < N; k++) blockCenters.push(-HALF + CELL / 2 + k * CELL);
+export const BLOCK = 30, SW = 3, ROAD = 12, CELL = BLOCK + 2 * SW + ROAD; // 48
+export let N = 6, HALF = 144, BOUND = 154;
+export const roadCenters = [], blockCenters = [];
+export function setLayout(n) {
+  N = n; HALF = N * CELL / 2; BOUND = HALF + ROAD / 2 + 4;
+  roadCenters.length = 0; blockCenters.length = 0;
+  for (let k = 0; k <= N; k++) roadCenters.push(-HALF + k * CELL);
+  for (let k = 0; k < N; k++) blockCenters.push(-HALF + CELL / 2 + k * CELL);
+}
+setLayout(6);
 
 function rng(seed) { let s = seed >>> 0; return () => { s = (s + 0x6D2B79F5) >>> 0; let t = s; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
 
-export function generateCity(types, seed = (Math.random() * 1e9) | 0) {
-  const R = rng(seed), G = types.groups;
+export function generateCity(types, seed = (Math.random() * 1e9) | 0, opts = null) {
+  setLayout(opts ? opts.n : 6);
+  const R = rng(seed), G = types.groups, TH = opts ? opts.theme : {}, TG = G.theme;
+  const diff = opts ? opts.diff : 1;
   const pick = (a) => a[(R() * a.length) | 0];
   const objs = [], lanes = [], walkers = [], stacks = [], blockKinds = [];
   const add = (t, x, z, yaw = 0, col) => {
-    const gold = t.cat !== 'bld' && t.cat !== 'seg' && R() < 0.025;
+    const gold = t.cat !== 'bld' && t.cat !== 'seg' && t.cat !== 'coin' && R() < 0.025;
+    if (col === undefined && TH.leaf && t.cat === 'tree' && (t.name === 'tree' || t.name === 'pine')) col = pick(TH.leaf);
     objs.push({ t, x, z, yaw, col: col ?? pick(t.pal), gold });
   };
-  const addStack = (k, x, z, n) => { stacks.push({ k, x, z, n, yaw: ((R() * 4) | 0) * Math.PI / 2, c1: pick(G.segs ? types.groups.segs[k].a.pal : [0xffffff]), c2: pick(types.groups.segs[k].a.pal) }); };
-  const kinds = [];
-  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
-    const d = Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5));
-    let k;
-    if (d < 1) k = 'downtown';
-    else if (d < 2) k = pick(['mid', 'mid', 'mid', 'plaza', 'park', 'stacks']);
-    else k = pick(['suburb', 'suburb', 'suburb', 'suburb', 'park', 'parking', 'mid', 'stacks']);
-    kinds.push(k);
+  const addStack = (k, x, z, n) => { if (opts) n = Math.max(3, Math.min(n, Math.round(6 + diff * 48))); stacks.push({ k, x, z, n, yaw: ((R() * 4) | 0) * Math.PI / 2, c1: pick(G.segs ? types.groups.segs[k].a.pal : [0xffffff]), c2: pick(types.groups.segs[k].a.pal) }); };
+  let kinds = [];
+  if (opts) kinds = opts.kinds.slice();
+  else {
+    for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+      const d = Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5));
+      let k;
+      if (d < 1) k = 'downtown';
+      else if (d < 2) k = pick(['mid', 'mid', 'mid', 'plaza', 'park', 'stacks']);
+      else k = pick(['suburb', 'suburb', 'suburb', 'suburb', 'park', 'parking', 'mid', 'stacks']);
+      kinds.push(k);
+    }
+    const ensure = (k, n = 1) => { let have = kinds.filter(v => v === k).length; while (have < n) { const c = []; kinds.forEach((v, idx) => { const i = (idx / N) | 0, j = idx % N; if (Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5)) > 1 && v !== 'park' && v !== 'plaza' && v !== 'parking' && v !== 'stacks') c.push(idx); }); kinds[pick(c)] = k; have++; } };
+    ensure('park'); ensure('plaza'); ensure('parking'); ensure('stacks', 2);
   }
-  const ensure = (k, n = 1) => { let have = kinds.filter(v => v === k).length; while (have < n) { const c = []; kinds.forEach((v, idx) => { const i = (idx / N) | 0, j = idx % N; if (Math.max(Math.abs(i - 2.5), Math.abs(j - 2.5)) > 1 && v !== 'park' && v !== 'plaza' && v !== 'parking' && v !== 'stacks') c.push(idx); }); kinds[pick(c)] = k; have++; } };
-  ensure('park'); ensure('plaza'); ensure('parking'); ensure('stacks', 2);
   const faceOut = (lx, lz) => Math.abs(lx) > Math.abs(lz) ? (lx > 0 ? Math.PI / 2 : -Math.PI / 2) : (lz > 0 ? 0 : Math.PI);
   const M = G.misc;
   for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
@@ -98,8 +109,42 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0) {
       }
       put(M.waterTower, 12, -13); for (const lz of [-6.8, 6.8]) { put(M.lamp, -6, lz); put(M.lamp, 6, lz); }
       peopleIdle(3, 13);
+    } else if (kind === 'farm') {
+      put(G.barn, -8.5, -8.5, Math.PI / 4); put(M.waterTower, -12, 4);
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) put(TG.crop, 2 + c * 3.2, -12 + r * 2.6, 0);
+      for (let k = 0; k < 5; k++) put(TG.hay, -2 + R() * 14, 2 + R() * 4, R() * 6.28);
+      for (let k = 0; k < 6; k++) put(TG.cow, -13 + R() * 26, 8 + R() * 5, R() * 6.28);
+      put(TG.tractor, -3, -2, R() * 6.28); tree(-13, 13); tree(13, 13); peopleIdle(2, 10);
+    } else if (kind === 'beach') {
+      for (let k = 0; k < 5; k++) put(TG.palm, -13 + k * 6.5 + R() * 2, -12 + R() * 3, R() * 6.28);
+      for (let k = 0; k < 6; k++) { const x = -11 + (k % 3) * 11 + R() * 2, z = -3 + ((k / 3) | 0) * 7; put(M.umbrella, x, z); put(pick(G.people), x + 1.5, z + 0.6, R() * 6.28); if (R() < 0.6) put(TG.ball, x - 1.6, z + 1.2); }
+      for (let k = 0; k < 3; k++) put(TG.sandcastle, -9 + k * 9, 9, R());
+      for (let k = 0; k < 2; k++) put(TG.boat, -7 + k * 14, 13, Math.PI / 2 + (R() - 0.5) * 0.4);
+      peopleIdle(5, 12);
+    } else if (kind === 'harbor') {
+      for (let r = 0; r < 2; r++) for (let c = 0; c < 4; c++) put(TG.container, -12 + c * 3.2, -10 + r * 7, 0);
+      put(TG.crane, 9, -6, Math.PI);
+      for (let k = 0; k < 3; k++) put(TG.boat, -10 + k * 10, 9 + R() * 3, Math.PI / 2);
+      put(pick(G.big.slice(0, 2)), 2, -2, Math.PI / 2); for (let c = 0; c < 4; c++) put(M.cone, -2 + c * 1.4, 3);
+      peopleIdle(4, 12);
+    } else if (kind === 'desert') {
+      for (let k = 0; k < 9; k++) put(TG.cactus, (R() * 2 - 1) * 13, (R() * 2 - 1) * 13, R() * 6.28);
+      for (let k = 0; k < 6; k++) put(TG.rock, (R() * 2 - 1) * 13, (R() * 2 - 1) * 13, R() * 6.28);
+      put(G.houses[(R() * 3) | 0], -7, -7, faceOut(-7, -7), 0xffe8cc); if (R() < 0.6) put(M.gas, 7, 7, faceOut(7, 7)); else put(M.waterTower, 8, 8);
+      peopleIdle(3, 12);
+    } else if (kind === 'market') {
+      for (const lx of [-9, 0, 9]) for (const lz of [-9, 0, 9]) { if (lx === 0 && lz === 0) { put(M.fountain, 0, 0); continue; } put(TG.stall, lx, lz, R() < 0.5 ? 0 : Math.PI); }
+      for (let k = 0; k < 4; k++) put(M.umbrella, (R() * 2 - 1) * 12, (R() * 2 - 1) * 12);
+      put(M.vending, -13, 4); put(M.vending, 13, -4); peopleIdle(18, 13);
+    } else if (kind === 'industrial') {
+      put(G.shops[(R() * 2) | 0], -7.5, -7.5, 0, 0xdee2e6); put(G.apts[0], 7.5, -7.5, 0, 0xe9ecef);
+      for (let c = 0; c < 4; c++) put(TG.container, -12 + c * 3.2, 7, 0);
+      put(M.waterTower, 9, 9); put(pick(G.big.slice(0, 2)), 3, 2, 0); for (let c = 0; c < 5; c++) put(M.cone, -4 + c * 1.6, 1);
+      peopleIdle(3, 12);
     }
+    if (TH.snow && (kind === 'suburb' || kind === 'park' || kind === 'plaza' || kind === 'mid')) { for (let k = 0; k < 2; k++) put(TG.snowman, (R() * 2 - 1) * 12, (R() * 2 - 1) * 12, R() * 6.28); if (kind === 'park') put(TG.igloo, 8, 8, -Math.PI * 0.75); }
     const S = 17.2;
+    const street = TH.street !== false;
     for (let side = 0; side < 4; side++) {
       const yaw = side * Math.PI / 2;
       const at = (t, along, off, col) => {
@@ -108,6 +153,7 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0) {
         put(t, lx, lz, yaw, col);
       };
       for (const a of [-12, 0, 12]) at(M.lamp, a, S);
+      if (!street) { for (const a of [-6, 6]) if (R() < 0.6) at(TH.edge ? TG[TH.edge] : G.trees[0], a, S - 0.2); continue; }
       for (const a of [-6, 6]) if (R() < 0.85) at(G.trees[0], a, S - 0.2);
       if (R() < 0.6) at(M.hydrant, -9 + R() * 18, S);
       if (R() < 0.6) at(M.trash, -3 + R() * 2, S - 0.4);
@@ -118,17 +164,19 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0) {
       if (R() < 0.3) at(G.moto, 15, S + 1.3);
       if (R() < 0.15) at(M.gift, -4, 15.8);
     }
-    for (const [sx, sz] of [[-1, -1], [1, 1]]) put(M.tlight, sx * 17.4, sz * 17.4, sx > 0 ? 0 : Math.PI);
-    const nW = 5 + ((R() * 4) | 0);
+    if (street) for (const [sx, sz] of [[-1, -1], [1, 1]]) put(M.tlight, sx * 17.4, sz * 17.4, sx > 0 ? 0 : Math.PI);
+    const nW = Math.round((5 + ((R() * 4) | 0)) * (TH.walk ?? 1));
     for (let k = 0; k < nW; k++) walkers.push({ t: pick(G.people), col: pick(PALS(G)), cx, cz, p: R() * 132, dir: R() < 0.5 ? 1 : -1, speed: 1.1 + R() * 0.7, off: 16.2 + (R() - 0.5) * 1.2 });
   }
+  const named = { van: G.big[0], truck: G.big[1], bus: G.big[2], car: G.cars[0], suv: G.cars[2], taxi: G.cars[3] };
+  const laneT = TH.laneTypes ? TH.laneTypes.map(k => TG[k] || named[k]).filter(Boolean) : null;
   for (let k = 0; k <= N; k++) for (let b = 0; b < N; b++) for (const s of [-1, 1]) {
-    if (R() < 0.5) continue;
+    if (R() < 1 - (TH.parked ?? 0.5)) continue;
     const rc = roadCenters[k], bc = blockCenters[b];
     const cnt = 1 + ((R() * 3) | 0);
     for (let c = 0; c < cnt; c++) {
       const along = bc - 8 + c * 5.5 + R();
-      const t = R() < 0.1 ? pick(G.big.slice(0, 2)) : pick(G.cars);
+      const t = laneT ? pick(laneT) : R() < 0.1 ? pick(G.big.slice(0, 2)) : pick(G.cars);
       if (R() < 0.5) add(t, along, rc + s * 4.6, s > 0 ? Math.PI / 2 : -Math.PI / 2);
       else add(t, rc + s * 4.6, along, s > 0 ? Math.PI : 0);
     }
@@ -136,13 +184,19 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0) {
   const L = 2 * HALF + 16;
   for (let k = 0; k <= N; k++) for (const axis of ['x', 'z']) for (const dir of [1, -1]) {
     const lane = { axis, dir, fixed: roadCenters[k] + (axis === 'x' ? dir * 1.6 : -dir * 1.6), cars: [], speed: 7 + R() * 3, L };
-    const n = 2 + ((R() * 3) | 0), off = R() * L;
+    if (opts && R() > (TH.traffic ?? 0.6)) continue;
+    const n = opts ? 1 + ((R() * 2) | 0) : 2 + ((R() * 3) | 0), off = R() * L;
     for (let c = 0; c < n; c++) {
       const r = R();
-      const t = r < 0.18 ? pick(G.big) : r < 0.26 ? G.moto : pick(G.cars);
+      const t = laneT ? pick(laneT) : r < 0.18 ? pick(G.big) : r < 0.26 ? G.moto : pick(G.cars);
       lane.cars.push({ t, col: pick(t.pal), s: ((off + c * L / n) % L) - L / 2, v: lane.speed });
     }
     lanes.push(lane);
+  }
+  if (opts) {
+    // 金币：放在道路上
+    for (let k = 0; k < opts.coins; k++) { const rc = pick(roadCenters), a = (R() * 2 - 1) * (HALF - 4); if (R() < 0.5) add(TG.coin, a, rc + (R() - 0.5) * 6, 0); else add(TG.coin, rc + (R() - 0.5) * 6, a, 0); }
+    return { objs, lanes, walkers, stacks, blockKinds, seed };
   }
   for (let a = -HALF - 10; a <= HALF + 10; a += 8) for (const s of [-1, 1]) {
     add(pick(G.trees), a + R() * 2, s * (HALF + 10 + R() * 2));
@@ -153,7 +207,8 @@ export function generateCity(types, seed = (Math.random() * 1e9) | 0) {
 const PALS = (G) => G.people[0].pal;
 
 // ---------- 地面：合并的顶点色几何体（清晰，无大贴图） ----------
-export function buildGround(blockKinds) {
+export function buildGround(blockKinds, TH = {}) {
+  const GC = TH.ground || {};
   const pos = [], col = [], uv = [];
   const c = new THREE.Color();
   const quad = (x0, z0, x1, z1, y, color) => {
@@ -164,15 +219,16 @@ export function buildGround(blockKinds) {
     for (const o of order) { const [x, z] = v[o]; pos.push(x, y, z); col.push(c.r, c.g, c.b); uv.push(x / 6, z / 6); }
   };
   const E = 400;
-  quad(-E, -E, E, E, 0, 0x9be39b);
+  quad(-E, -E, E, E, 0, GC.outer ?? 0x9be39b);
+  if (GC.rim !== undefined) { const e2 = HALF + ROAD / 2 + 3; quad(-e2, -e2, e2, e2, 0.005, GC.rim); }
   const RW = ROAD / 2, ext = HALF + RW;
-  const ASPH = 0x6b7385, LINE = 0xffffff, YEL = 0xffd43b;
+  const ASPH = GC.road ?? 0x6b7385, LINE = GC.line ?? 0xffffff, YEL = GC.yel ?? 0xffd43b, LINES = GC.lines !== false;
   for (const rc of roadCenters) {
     quad(-ext, rc - RW, ext, rc + RW, 0.01, ASPH);
     quad(rc - RW, -ext, rc + RW, ext, 0.01, ASPH);
   }
   // 车道线（只在路段上，不进入路口）
-  for (const rc of roadCenters) for (let b = 0; b < N; b++) {
+  if (LINES) for (const rc of roadCenters) for (let b = 0; b < N; b++) {
     const a0 = blockCenters[b] - CELL / 2 + RW + 2.5, a1 = blockCenters[b] + CELL / 2 - RW - 2.5;
     quad(a0, rc - 0.22, a1, rc - 0.07, 0.02, YEL); quad(a0, rc + 0.07, a1, rc + 0.22, 0.02, YEL);
     quad(rc - 0.22, a0, rc - 0.07, a1, 0.02, YEL); quad(rc + 0.07, a0, rc + 0.22, a1, 0.02, YEL);
@@ -186,13 +242,22 @@ export function buildGround(blockKinds) {
       quad(rc + w, e, rc + w + 0.6, e + 1.8, 0.02, LINE);
     }
   }
-  const groundColor = { downtown: 0xf1ece4, mid: 0xefe9e0, suburb: 0xa9e5a0, park: 0x96dd8e, plaza: 0xfbe7c6, parking: 0x7c8496, stacks: 0xffe3ec };
+  const groundColor = Object.assign({ downtown: 0xf1ece4, mid: 0xefe9e0, suburb: 0xa9e5a0, park: 0x96dd8e, plaza: 0xfbe7c6, parking: 0x7c8496, stacks: 0xffe3ec, farm: 0xb7e08a, beach: 0xffe8a3, harbor: 0xd5d9de, desert: 0xf3d9a4, market: 0xfbe7c6, industrial: 0xc9ced6 }, GC.kinds || {});
   for (const b of blockKinds) {
     const { cx, cz, kind } = b, h = BLOCK / 2;
-    quad(cx - h - SW, cz - h - SW, cx + h + SW, cz + h + SW, 0.03, 0xd6d0c6);       // 路沿
-    quad(cx - h - SW + 0.3, cz - h - SW + 0.3, cx + h + SW - 0.3, cz + h + SW - 0.3, 0.04, 0xf4efe8); // 人行道
+    quad(cx - h - SW, cz - h - SW, cx + h + SW, cz + h + SW, 0.03, GC.curb ?? 0xd6d0c6);       // 路沿
+    quad(cx - h - SW + 0.3, cz - h - SW + 0.3, cx + h + SW - 0.3, cz + h + SW - 0.3, 0.04, GC.side ?? 0xf4efe8); // 人行道
     quad(cx - h, cz - h, cx + h, cz + h, 0.05, groundColor[kind]);
-    if (kind === 'park') {
+    if (kind === 'farm') {
+      for (let r = 0; r < 4; r++) quad(cx + 0.5, cz - 13 + r * 2.6 - 0.9, cx + 13.5, cz - 13 + r * 2.6 + 0.9, 0.06, 0x9c6b3e);
+      quad(cx - 14.5, cz + 6, cx + 14.5, cz + 6.25, 0.06, 0xffffff); 
+    } else if (kind === 'beach') {
+      quad(cx - h, cz + 6.5, cx + h, cz + h, 0.06, 0x5ec8f2); quad(cx - h, cz + 6, cx + h, cz + 6.7, 0.065, 0xffffff);
+    } else if (kind === 'harbor') {
+      quad(cx - h, cz + 5.5, cx + h, cz + h, 0.06, 0x3ea6e0); quad(cx - h, cz + 5, cx + h, cz + 5.6, 0.065, 0x8d6e63);
+    } else if (kind === 'desert') {
+      for (let k = 0; k < 5; k++) quad(cx - h, cz - 12 + k * 6, cx + h, cz - 11.6 + k * 6, 0.06, 0xeacb8e);
+    } else if (kind === 'park') {
       quad(cx - 1.6, cz - h, cx + 1.6, cz + h, 0.06, 0xffe8b0); quad(cx - h, cz - 1.6, cx + h, cz + 1.6, 0.06, 0xffe8b0);
       const circ = 32; c.set(0xffe8b0);
       for (let k = 0; k < circ; k++) { const a0 = k / circ * Math.PI * 2, a1 = (k + 1) / circ * Math.PI * 2, r = 6.2; for (const [x, z] of [[0, 0], [Math.cos(a1) * r, Math.sin(a1) * r], [Math.cos(a0) * r, Math.sin(a0) * r]]) { pos.push(cx + x, 0.065, cz + z); col.push(c.r, c.g, c.b); uv.push((cx + x) / 6, (cz + z) / 6); } }

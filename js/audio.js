@@ -61,6 +61,8 @@ export class Sfx {
   fanfare() { if (!this.ctx) return; [523, 659, 784, 1047, 784, 1047].forEach((f, i) => { this.osc('square', f, f, i === 5 ? 0.7 : 0.16, 0.1, i * 0.13); this.osc('triangle', f / 2, f / 2, i === 5 ? 0.7 : 0.16, 0.12, i * 0.13); }); }
   bubble() { if (!this.ctx) return; const f = 500 + Math.random() * 400; this.osc('sine', f, f * 2.6, 0.09, 0.3); this.osc('sine', f * 1.5, f * 3, 0.05, 0.12, 0.03); }
   sting() { if (!this.ctx) return; this.osc('sawtooth', 900, 120, 0.35, 0.22); this.osc('square', 1300, 200, 0.2, 0.1); this.nz('highpass', 3000, 800, 0.3, 0.35); }
+  coin() { if (!this.ctx) return; this.osc('square', 988, 988, 0.08, 0.09); this.osc('square', 1319, 1319, 0.35, 0.09, 0.08); this.osc('sine', 2637, 2637, 0.3, 0.08, 0.08); }
+  star(i) { if (!this.ctx) return; const f = [784, 988, 1319][i] || 1319; this.osc('triangle', f, f * 1.5, 0.4, 0.16); this.osc('sine', f * 2, f * 2, 0.5, 0.08, 0.05); }
   pearl() { if (!this.ctx) return; [1568, 2093, 2637, 3136].forEach((f, i) => this.osc('sine', f, f, 0.4, 0.14, i * 0.06)); }
   slurp(size) { if (!this.ctx) return; const now = performance.now(); if (now - this.lastPop < 35) return; this.lastPop = now; const f = 500 / (1 + size * 0.5) + 120; this.osc('sine', f * 0.6, f * 2, 0.15, 0.3); this.nz('bandpass', 400, 1800, 0.18, 0.25, 0, null, 3); if (size > 2) this.osc('sine', 90, 35, 0.4, 0.6); }
   startAmbience() {
