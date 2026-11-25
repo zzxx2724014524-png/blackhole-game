@@ -1,6 +1,6 @@
 // 海底模式：发光漩涡在海床上吞噬海洋生物；鱼群会逃跑，水母/大型生物会伤害你；氧气需要靠气泡补充
 import * as THREE from 'three';
-import { GB, makeMaterial } from './models.js?v=2';
+import { GB, makeMaterial } from './models.js?v=3';
 
 const PI = Math.PI, W = 110; // 海床半宽
 let MAT = null, MODELS = null;
@@ -42,7 +42,7 @@ const SPEC = [
 ];
 const DECOR = [{ m: seaweedModel, n: 140, pal: [0x40c057, 0x2f9e44, 0x69db7c, 0x37b24d], s: [0.8, 1.8] }, { m: coralModel, n: 90, pal: [0xff8787, 0xffa94d, 0xf783ac, 0xb197fc, 0x66d9e8], s: [0.8, 1.6] }, { m: rockModel, n: 50, pal: [0x868e96, 0xadb5bd, 0x748089], s: [0.8, 2.5] }];
 
-const massFor = (L) => 5 * (Math.pow(1.55, L - 1) - 1);
+const massFor = (L) => 8 * (Math.pow(1.57, L - 1) - 1);
 const radiusFor = (L) => 0.9 * Math.pow(1.2, L - 1);
 
 function inst(geo, n) {

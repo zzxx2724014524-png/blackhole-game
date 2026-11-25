@@ -1,9 +1,10 @@
 // 黑洞入侵 · 网页版 v2 —— 主逻辑（城市模式 + 海底模式入口）
 import * as THREE from 'three';
-import { buildTypes, makeMaterial } from './models.js?v=2';
-import { generateCity, buildGround, BOUND, HALF, roadCenters } from './city.js?v=2';
-import { Sfx } from './audio.js?v=2';
-import { SeaWorld } from './sea.js?v=2';
+import { buildTypes, makeMaterial } from './models.js?v=3';
+import { generateCity, buildGround, BOUND, HALF, roadCenters } from './city.js?v=3';
+import { levelDef, LEVEL_COUNT, THEMES } from './levels.js?v=3';
+import { Sfx } from './audio.js?v=3';
+import { SeaWorld } from './sea.js?v=3';
 
 const $ = (id) => document.getElementById(id);
 const isTouch = matchMedia('(pointer:coarse)').matches || 'ontouchstart' in window;
@@ -84,10 +85,11 @@ let typeMesh = [];          // 每类型一个 InstancedMesh（每帧按可见�
 let objMat = new Float32Array(16);
 let lanes = [];
 let holes = [], player = null;
-let state = 'menu', mode = 'classic', timeLeft = 120, gameTime = 0, totalValue = 1, eatenValue = 0;
+let state = 'menu', mode = 'level', timeLeft = 120, gameTime = 0, totalValue = 1, eatenValue = 0;
 let playerColor = 0x7b5cff, playerName = '鸭鸭';
 let combo = 0, comboT = 0, comboBest = 0, rushT = 0, rushDone = false;
 let sea = null;
+let curLevel = 1, lv = null, lvFitK = 1, coins = [], lvCleared = false;
 const COLORS = [0x7b5cff, 0xff4d6d, 0x2ec4b6, 0xffb703, 0x3a86ff, 0x8ac926, 0xff7a1a, 0xf15bb5];
 const AI_NAMES = ['小橘子', '夜行猫', '吞天大王', '西瓜太郎', '闪电侠', '饭团子', '螺蛳粉', '芝士喵', '黑旋风', '奶茶续命', '摸鱼达人', '虚空领主', '小笼包', '咕噜咕噜'];
 const GOLD = new THREE.Color(1.7, 1.25, 0.25);
@@ -96,7 +98,7 @@ const MAX_LEVEL = 16;
 const radiusFor = (L) => Math.pow(1.225, L - 1);
 
 // ---------------- 空间网格 ----------------
-const GS = 10, GOFF = BOUND + 30, GN = Math.ceil((GOFF * 2) / GS);
+const GS = 10, GOFF = 154 + 30, GN = Math.ceil((GOFF * 2) / GS);
 let grid = [];
 const cellIdx = (x, z) => { const i = Math.min(GN - 1, Math.max(0, Math.floor((x + GOFF) / GS))), j = Math.min(GN - 1, Math.max(0, Math.floor((z + GOFF) / GS))); return i * GN + j; };
 function gridAdd(o) { o.cell = cellIdx(o.x, o.z); grid[o.cell].push(o); }
@@ -129,9 +131,10 @@ function disposeCity() {
   clearPickups();
   objs = []; movers = []; falling = []; stacks = []; disturbed.clear();
 }
-function buildCity() {
+function buildCity(def) {
   disposeCity();
-  city = generateCity(TYPES);
+  city = def ? generateCity(TYPES, def.seed, def) : generateCity(TYPES);
+  coins = [];
   grid = Array.from({ length: GN * GN }, () => []);
   const counts = new Array(TYPES.list.length).fill(0);
   const mk = (t, x, z, yaw, col, gold) => {
@@ -139,7 +142,7 @@ function buildCity() {
     const c = new THREE.Color(col); if (gold) c.copy(GOLD); o.cr = c.r; o.cg = c.g; o.cb = c.b;
     counts[t.id]++; objs.push(o); return o;
   };
-  for (const s of city.objs) gridAdd(mk(s.t, s.x, s.z, s.yaw, s.col, s.gold));
+  for (const s of city.objs) { const o = mk(s.t, s.x, s.z, s.yaw, s.col, s.gold); gridAdd(o); if (s.t.cat === 'coin') coins.push(o); }
   lanes = city.lanes;
   for (const lane of lanes) lane.cars = lane.cars.map(c => { const o = mk(c.t, 0, 0, 0, c.col, false); o.mover = { kind: 'car', lane, s: c.s, v: c.v }; movers.push(o); return o; });
   for (const w of city.walkers) { const o = mk(w.t, 0, 0, 0, w.col, Math.random() < 0.03); o.mover = { kind: 'walk', ...w, ph: Math.random() * 6 }; movers.push(o); }
@@ -166,9 +169,9 @@ function buildCity() {
     scene.add(m); typeMesh[t.id] = m;
   }
   for (const o of objs) { if (o.mover) updateMover(o, 0); writeMatrix(o); }
-  groundMesh = new THREE.Mesh(buildGround(city.blockKinds), groundMat); groundMesh.renderOrder = -5; scene.add(groundMesh);
+  groundMesh = new THREE.Mesh(buildGround(city.blockKinds, def ? def.theme : undefined), groundMat); groundMesh.renderOrder = -5; scene.add(groundMesh);
   blobRd = blobMesh(false, objs.length); blobSq = blobMesh(true, objs.length + stacks.length); scene.add(blobRd, blobSq);
-  totalValue = objs.reduce((a, o) => a + o.t.value, 0); eatenValue = 0;
+  totalValue = objs.reduce((a, o) => a + (o.t.cat === 'coin' ? 0 : o.t.value), 0); eatenValue = 0;
 }
 
 // ---------------- 每帧可见性压缩（视锥 + 距离裁剪）----------------
@@ -180,7 +183,7 @@ function compact() {
   const p0 = P[0], p1 = P[1], p2 = P[2], p3 = P[3], p4 = P[4], p5 = P[5];
   for (const m of typeMesh) if (m) m.count = 0;
   let nr = 0, ns = 0; const br = blobRd.instanceMatrix.array, bs = blobSq.instanceMatrix.array;
-  const tinyCull = camD > 120 ? 1.0 : camD > 75 ? 0.45 : 0;
+  const tinyCull = mode === 'level' && state !== 'menu' ? (camD > 220 ? 0.45 : 0) : camD > 120 ? 1.0 : camD > 75 ? 0.45 : 0;
   for (let i = 0, L = objs.length; i < L; i++) {
     const o = objs[i]; if (o.state === 2 || o.hidden) continue;
     const t = o.t; if (t.fr < tinyCull && t.h < 2.5 && o.state === 0) continue;
@@ -327,6 +330,10 @@ function updateFalling(dt) {
 function comboMult() { return combo >= 40 ? 5 : combo >= 20 ? 3 : combo >= 10 ? 2 : combo >= 5 ? 1.5 : 1; }
 const MILESTONES = [[10, '不错！'], [20, '爽吃！'], [40, '停不下来！'], [80, '暴食之王！'], [150, '吞噬天地！']];
 function eaten(o, h) {
+  if (o.t.cat === 'coin') {
+    if (h.isPlayer) { const secs = 2 + ((o.id * 7) % 4); timeLeft += secs; popup('+' + secs + '秒', 'time'); sfx.coin(); vib(15); h.score += 50; }
+    return;
+  }
   h.addMass(o.t.value); eatenValue += o.t.value;
   if (h.isPlayer) {
     combo++; comboT = 1.4; if (combo > comboBest) comboBest = combo;
@@ -475,6 +482,7 @@ function aiThink(h) {
     if (s > bs) { bs = s; best = o; }
   });
   for (const p of pickups) { const d = Math.hypot(p.x - h.x, p.z - h.z); if (d < 25 && 8 / (d + 3) > bs) { bs = 8 / (d + 3); best = p; } }
+  if (!best && mode === 'level') { let bd = 1e9; for (const o of objs) { if (o.state || o.hidden || o.t.fr >= r9 || (o.stack && o !== o.stack.segs[0])) continue; const d = Math.abs(o.x - h.x) + Math.abs(o.z - h.z); if (d < bd) { bd = d; best = o; } } }
   if (best) { ai.tx = best.x; ai.tz = best.z; ai.mode = 'eat'; return; }
   if (ai.mode !== 'wander' || Math.hypot(ai.tx - h.x, ai.tz - h.z) < 5) { ai.tx = (Math.random() * 2 - 1) * (HALF - 15); ai.tz = (Math.random() * 2 - 1) * (HALF - 15); }
   ai.mode = 'wander';
@@ -573,6 +581,7 @@ function updateCamera(dt) {
   else {
     tx = player.x; tz = player.z; const r = Math.max(player.rTarget * player.rMul, 1);
     want = Math.max((8 + r * 3.3) / tan, (8 + r * 2.5) / (tan * aspect));
+    if (mode === 'level') { want *= 1 + (lvFitK - 1) * Math.pow(Math.min(1, player.mass / totalValue), 0.6); tx = Math.max(-HALF + 6, Math.min(HALF - 6, tx)); tz = Math.max(-HALF + 6, Math.min(HALF - 6, tz)); }
   }
   const a = 1 - Math.exp(-dt * (state === 'menu' ? 1 : 10));
   camX += (tx - camX) * a; camZ += (tz - camZ) * a; camD += (want - camD) * (1 - Math.exp(-dt * 2.2));
@@ -580,12 +589,13 @@ function updateCamera(dt) {
   camera.position.set(camX + sx, Math.sin(PITCH) * camD, camZ + Math.cos(PITCH) * camD + sz);
   camera.lookAt(camX + sx, 0, camZ - camD * 0.04 + sz);
   camera.updateMatrixWorld();
-  scene.fog.near = camD * 1.6; scene.fog.far = camD * 4 + 120;
+  if (mode === 'level' && state !== 'menu') { scene.fog.near = camD * 2.4; scene.fog.far = camD * 6 + 160; } else { scene.fog.near = camD * 1.6; scene.fog.far = camD * 4 + 120; }
 }
 
 // ---------------- HUD ----------------
 const popPool = []; let popAcc = 0, popT = 0, popGold = false;
-function popup(pts, gold) { if (typeof pts === 'string') { popAcc = pts; popT = 0; return; } if (typeof popAcc === 'string') popAcc = 0; popAcc += pts; if (gold) popGold = true; }
+let popKind = '';
+function popup(pts, gold) { if (typeof pts === 'string') { popAcc = pts; popT = 0; popKind = gold === 'time' ? ' time' : ' o2'; return; } if (typeof popAcc === 'string') popAcc = 0; popAcc += pts; if (gold) popGold = true; }
 function flushPop(dt) {
   const F = sea ? sea.v : player;
   popT -= dt; if (popAcc <= 0 || popT > 0 || !F) return;
@@ -594,7 +604,7 @@ function flushPop(dt) {
   if (!el) { el = document.createElement('div'); el.className = 'pop'; $('pops').appendChild(el); popPool.push(el); el.addEventListener('animationend', () => { el._busy = false; el.style.display = 'none'; }); }
   _v.set(F.x, 0, F.z - F.r).project(camera);
   const x = (_v.x * 0.5 + 0.5) * innerWidth + (Math.random() - 0.5) * 50, y = (-_v.y * 0.5 + 0.5) * innerHeight - 20;
-  el._busy = true; el.textContent = typeof popAcc === 'string' ? popAcc : (popGold ? '黄金 +' : '+') + popAcc; el.className = 'pop' + (popGold ? ' gold' : '') + (popAcc >= 500 ? ' big' : '') + (typeof popAcc === 'string' ? ' o2' : '');
+  el._busy = true; el.textContent = typeof popAcc === 'string' ? popAcc : (popGold ? '黄金 +' : '+') + popAcc; el.className = 'pop' + (popGold ? ' gold' : '') + (popAcc >= 500 ? ' big' : '') + (typeof popAcc === 'string' ? popKind : '');
   el.style.display = 'block'; el.style.transform = `translate(${x}px,${y}px) translate(-50%,-50%)`;
   el.style.animation = 'none'; void el.offsetWidth; el.style.animation = '';
   popAcc = 0; popGold = false;
@@ -602,7 +612,7 @@ function flushPop(dt) {
 function feed(html) { const f = $('feed'), d = document.createElement('div'); d.innerHTML = html; f.prepend(d); setTimeout(() => d.remove(), 3500); while (f.children.length > 3) f.lastChild.remove(); }
 function banner(txt, col) { const b = $('banner'); b.textContent = txt; b.style.color = col || ''; b.classList.remove('show'); void b.offsetWidth; b.classList.add('show'); }
 function flashLevel() { $('lvl').animate([{ transform: 'scale(1.35)' }, { transform: 'scale(1)' }], { duration: 400, easing: 'ease-out' }); }
-let hudT = 0, lastSec = -1; const hudCache = {};
+let hudT = 0, lastSec = -1, hintT = 0, hintO = null; const hudCache = {};
 const setText = (id, v) => { if (hudCache[id] !== v) { hudCache[id] = v; $(id).textContent = v; } };
 function updateHud(dt) {
   hudT -= dt;
@@ -615,13 +625,14 @@ function updateHud(dt) {
   setText('myScore', player.score);
   // 连击
   const cb = $('combo');
-  if (combo >= 3 && comboT > 0) { cb.classList.remove('hidden'); setText('comboN', '×' + combo); setText('comboM', comboMult() > 1 ? `得分×${comboMult()}` : '连吃'); $('comboBar').style.transform = `scaleX(${Math.max(0, comboT / 1.4)})`; }
+  if (combo >= 5 && comboT > 0) { cb.classList.remove('hidden'); setText('comboN', '×' + comboMult()); setText('comboM', `连吃 ${combo > 99 ? '99+' : combo}`); $('comboBar').style.transform = `scaleX(${Math.max(0, comboT / 1.4)})`; }
   else cb.classList.add('hidden');
   // 道具
   let fxHtml = ''; for (const k in PU) if (player.fx[k] > 0) fxHtml += `<div style="--c:${PU[k].col}">${PU[k].name} ${Math.ceil(player.fx[k])}s</div>`;
   if (hudCache.fx !== fxHtml) { hudCache.fx = fxHtml; $('fx').innerHTML = fxHtml; }
   $('rush').classList.toggle('hidden', !(rushT > 0));
   if (mode === 'solo') { const p = Math.min(100, eatenValue / totalValue * 100); setText('soloTxt', `城市吞噬 ${p.toFixed(1)}%`); $('soloBar').style.width = p + '%'; }
+  if (mode === 'level') { const p = Math.min(100, eatenValue / totalValue * 100); setText('soloTxt', `第${lv.i}关 · 吞噬 ${Math.floor(p)}%  ${'★'.repeat(starsFor(p))}${'☆'.repeat(3 - starsFor(p))}`); $('soloBar').style.width = p.toFixed(1) + '%'; }
   if (hudT <= 0) {
     hudT = 0.3;
     const sorted = holes.slice().sort((a, b) => b.score - a.score);
@@ -630,6 +641,16 @@ function updateHud(dt) {
     if (hudCache.lb !== html) { hudCache.lb = html; $('lb').innerHTML = html; }
     const leader = sorted[0];
     for (const h of holes) { const c = h === leader && h.score > 0; if (c !== h._crown) h.setLabel(c); }
+  }
+  // 闯关：剩余不多时，指示最近的未吃物体
+  if (mode === 'level') {
+    const hint = $('hint'); hintT -= dt;
+    if (hintT <= 0) { hintT = 0.25; hintO = null; if (eatenValue >= totalValue * 0.9) { let bd = 1e9; for (const o of objs) { if (o.state || o.hidden || o.t.cat === 'coin' || (o.stack && o !== o.stack.segs[0])) continue; const d = (o.x - player.x) ** 2 + (o.z - player.z) ** 2; if (d < bd) { bd = d; hintO = o; } } } }
+    if (hintO && hintO.state === 0) {
+      _v.set(hintO.x, 0, hintO.z).project(camera); let x = (_v.x * 0.5 + 0.5) * innerWidth, y = (-_v.y * 0.5 + 0.5) * innerHeight;
+      const m = 34; x = Math.max(m, Math.min(innerWidth - m, x)); y = Math.max(150, Math.min(innerHeight - 190, y));
+      hint.style.display = 'block'; hint.style.transform = `translate(${x | 0}px,${y | 0}px) translate(-50%,-100%)`;
+    } else hint.style.display = 'none';
   }
   if (!player.alive && player.respawn > 0 && mode !== 'battle') setText('deadT', `${Math.ceil(player.respawn)} 秒后复活`);
 }
@@ -654,10 +675,38 @@ function setupHoles(withPlayer, nAI) {
   for (const h of holes) randomSpawn(h);
   if (player) { randomSpawn(player); for (const h of holes) if (!h.isPlayer && Math.hypot(h.x - player.x, h.z - player.z) < 30) { h.x = -h.x || 60; h.z = -h.z || 60; } }
 }
-function enterCityVisuals() { scene.background = SKY_TEX; scene.fog.color.setHex(SKY_FOG); hemi.color.setHex(0xffffff); hemi.groundColor.setHex(0xb8d4a0); hemi.intensity = 1.55; sun.color.setHex(0xfff1dc); sun.intensity = 1.9; }
+const skyCache = {};
+const TOD = [null, { sky: ['#ffb3c7', '#ffe0ea', '#fff6f0'], tint: 0xfff0f4 }, { sky: ['#4fb4ff', '#b0e0ff', '#f0fbff'], tint: 0xffffff }, { sky: ['#ff7f50', '#ffbf80', '#ffe8c8'], tint: 0xffd8b0 }, { sky: ['#7bdff2', '#c9f5ff', '#fdfdea'], tint: 0xffffff }];
+function enterCityVisuals(def) {
+  if (!def) { scene.background = SKY_TEX; scene.fog.color.setHex(SKY_FOG); hemi.color.setHex(0xffffff); hemi.groundColor.setHex(0xb8d4a0); hemi.intensity = 1.55; sun.color.setHex(0xfff1dc); sun.intensity = 1.9; return; }
+  const th = def.theme, tod = def.themeKey !== 'night' ? TOD[(def.i / 12) | 0] : null;
+  const sky = tod ? tod.sky : th.sky, key = sky.join();
+  scene.background = skyCache[key] || (skyCache[key] = gradientTex(...sky));
+  scene.fog.color.setHex(th.fog);
+  const L = th.light; hemi.color.setHex(L[0]); hemi.groundColor.setHex(L[1]); hemi.intensity = L[2]; sun.color.setHex(L[3]); sun.intensity = L[4];
+  if (tod) sun.color.multiply(new THREE.Color(tod.tint));
+}
+// ---------- 闯关进度 ----------
+function loadProg() { try { return JSON.parse(localStorage.getItem('bh_levels') || '{}'); } catch (e) { return {}; } }
+function saveProg(p) { try { localStorage.setItem('bh_levels', JSON.stringify(p)); } catch (e) { } }
+function unlockedUpTo() { const p = loadProg(); let u = 1; while (u < LEVEL_COUNT && p[u] > 0) u++; return u; }
+function starsFor(pct) { if (!lv) return 0; return pct >= 99.9 ? 3 : pct >= (lv.target + 100) / 2 ? 2 : pct >= lv.target ? 1 : 0; }
+function showLevelSel() {
+  state = 'menu'; ['menu', 'over', 'hud'].forEach(id => $(id).classList.add('hidden')); $('levelSel').classList.remove('hidden');
+  const p = loadProg(), un = unlockedUpTo(), g = $('lvGrid'); let tot = 0, html = '';
+  for (let i = 1; i <= LEVEL_COUNT; i++) {
+    const st = p[i] || 0; tot += st; const d = levelDef(i), lock = i > un;
+    html += `<button data-l="${i}" class="${lock ? 'lock' : ''} ${i === un ? 'cur' : ''}">${lock ? '<small>🔒</small>' : `<small>${d.theme.icon}</small>`}${i}<em>${'★'.repeat(st)}<span class="off">${'★'.repeat(3 - st)}</span></em></button>`;
+  }
+  g.innerHTML = html; $('lvStars').textContent = `★ ${tot}/${LEVEL_COUNT * 3}`;
+  g.querySelectorAll('button').forEach(b => b.onclick = () => { const i = +b.dataset.l; if (i > unlockedUpTo()) { b.animate([{ transform: 'translateX(-4px)' }, { transform: 'translateX(4px)' }, { transform: 'none' }], 200); return; } startLevel(i); });
+  const cur = g.querySelector('.cur'); if (cur) cur.scrollIntoView({ block: 'center' });
+}
+function startLevel(i) { curLevel = i; mode = 'level'; $('levelSel').classList.add('hidden'); $('menu').classList.add('hidden'); startGame(); }
 function showMenu() {
   state = 'menu'; paused = false;
-  ['hud', 'over', 'count', 'dead', 'paused', 'seaHud'].forEach(id => $(id).classList.add('hidden'));
+  ['hud', 'over', 'count', 'dead', 'paused', 'seaHud', 'levelSel'].forEach(id => $(id).classList.add('hidden'));
+  document.body.classList.remove('lv'); lv = null; $('hint').style.display = 'none'; $('lvModeSub').textContent = `50 关 · 已解锁 ${unlockedUpTo()} 关 · 吃光地图拿三星 · 金币加时`;
   $('joy').classList.add('hidden');
   $('menu').classList.remove('hidden');
   if (sea) { sea.dispose(); sea = null; }
@@ -665,6 +714,7 @@ function showMenu() {
 }
 let countT = 0, lastCount = 4;
 function startGame() {
+  if (mode === 'level' && state === 'menu' && !$('menu').classList.contains('hidden')) { showLevelSel(); return; }
   sfx.init();
   playerName = ($('nameInput').value || '').trim() || '我';
   try { localStorage.setItem('bh_name', playerName); localStorage.setItem('bh_color', playerColor); } catch (e) { }
@@ -679,13 +729,27 @@ function startGame() {
     $('modeName').textContent = '海底模式';
   } else {
     if (sea) { sea.dispose(); sea = null; }
-    enterCityVisuals();
+    lv = mode === 'level' ? levelDef(curLevel) : null; lvCleared = false;
+    document.body.classList.toggle('lv', !!lv);
+    enterCityVisuals(lv);
     $('cityHud').classList.remove('hidden'); $('seaHud').classList.add('hidden');
-    buildCity();
-    setupHoles(true, mode === 'solo' ? 0 : mode === 'battle' ? 7 : 5);
+    buildCity(lv);
+    setupHoles(true, mode === 'solo' || lv ? 0 : mode === 'battle' ? 7 : 5);
+    if (lv) {
+      timeLeft = lv.time;
+      let rc = roadCenters[0]; for (const r of roadCenters) if (Math.abs(r) < Math.abs(rc)) rc = r; player.x = rc; player.z = rc;
+      // 视角：洞吃光整张图时的大小，镜头刚好框住整张图
+      let L = 1; while (L < MAX_LEVEL && totalValue >= massFor(L + 1)) L++;
+      const rF = radiusFor(L), tan = Math.tan(camera.fov * Math.PI / 360), asp = Math.min(camera.aspect, 1);
+      const stdD = Math.max((8 + rF * 3.3) / tan, (8 + rF * 2.5) / (tan * asp)), fitD = (HALF + 9) / (tan * asp);
+      lvFitK = Math.max(1, fitD / stdD);
+      const mk = $('solo').querySelector('.bar'); mk.querySelectorAll('.mk').forEach(e => e.remove());
+      for (const v of [lv.target, (lv.target + 100) / 2]) { const e = document.createElement('i'); e.className = 'mk'; e.style.left = v + '%'; mk.appendChild(e); }
+      banner(`第${lv.i}关 · ${lv.name}`, '#ffffff');
+    }
     camX = player.x; camZ = player.z; camD = 40;
-    $('solo').classList.toggle('hidden', mode !== 'solo');
-    $('modeName').textContent = { classic: '经典模式', battle: '大逃杀', solo: '单人模式' }[mode];
+    $('solo').classList.toggle('hidden', mode !== 'solo' && !lv);
+    $('modeName').textContent = lv ? `第${lv.i}关 · ${lv.theme.icon}${lv.name}` : { classic: '经典模式', battle: '大逃杀', solo: '单人模式' }[mode];
   }
   state = 'countdown'; countT = 3.0; lastCount = 4;
 }
@@ -699,11 +763,23 @@ function updateCountdown(dt) {
 }
 function endGame(reason) {
   if (state === 'over') return;
-  state = 'over'; sfx.stopMusic(); sfx.fanfare(); sfx.setIntense(false);
+  state = 'over'; $('hint').style.display = 'none'; sfx.stopMusic(); sfx.fanfare(); sfx.setIntense(false);
   $('dead').classList.add('hidden'); input.joy = null; $('joy').classList.add('hidden');
   const medal = ['🥇', '🥈', '🥉'];
   let bestKey = 'bh_best_' + mode, myScore;
-  if (mode === 'sea') {
+  ['overStars', 'nextBtn', 'selBtn'].forEach(id => $(id).classList.add('hidden')); $('againBtn').textContent = '再来一局';
+  if (mode === 'level') {
+    const pct = Math.min(100, eatenValue / totalValue * 100), st = starsFor(pct), bonus = reason === 'clear' ? Math.ceil(timeLeft) * 50 : 0;
+    player.score += bonus; myScore = player.score; bestKey = 'bh_best_lv' + lv.i;
+    const p = loadProg(); if (st > (p[lv.i] || 0)) { p[lv.i] = st; saveProg(p); }
+    $('overTitle').textContent = st ? (reason === 'clear' ? '🎉 完美吃光！' : '🎉 过关！') : '差一点点！';
+    $('myRank').innerHTML = `第${lv.i}关 · ${lv.name}<br>吞噬 <b>${pct.toFixed(1)}%</b>（目标 ${lv.target}%）· 得分 <b>${player.score}</b>`;
+    $('rankList').innerHTML = [['吞噬进度', pct.toFixed(1) + '%'], ['最高连吃', comboBest], ['剩余时间奖励', bonus], ['总分', player.score]].map(([k, v]) => `<li><span>${k}</span><b>${v}</b></li>`).join('');
+    const os = $('overStars'); os.classList.remove('hidden'); [...os.children].forEach(e => e.classList.remove('on'));
+    setTimeout(() => [...os.children].forEach((e, k) => { if (k < st) setTimeout(() => { e.classList.add('on'); sfx.star(k); vib(20); }, k * 350); }), 1000);
+    if (st && lv.i < LEVEL_COUNT) $('nextBtn').classList.remove('hidden');
+    $('selBtn').classList.remove('hidden'); $('againBtn').textContent = st ? '再玩一次' : '重试';
+  } else if (mode === 'sea') {
     const r = sea.result(); myScore = r.score;
     $('overTitle').textContent = reason === 'oxygen' ? '氧气耗尽！' : '上浮！时间到';
     $('myRank').innerHTML = `存活 <b>${r.time}s</b> · 最大体型 Lv.${r.level} · 珍珠 ${r.pearls} 颗<br>得分 <b>${r.score}</b>`;
@@ -728,7 +804,8 @@ function pause(p) { if (state !== 'play' && state !== 'countdown') return; pause
   const sk = $('skins');
   COLORS.forEach(c => { const b = document.createElement('button'); b.style.setProperty('--c', hex(c)); if (c === playerColor) b.classList.add('active'); b.onclick = () => { playerColor = c; [...sk.children].forEach(x => x.classList.remove('active')); b.classList.add('active'); }; sk.appendChild(b); });
   document.querySelectorAll('.mode').forEach(b => b.onclick = () => { document.querySelectorAll('.mode').forEach(x => x.classList.remove('active')); b.classList.add('active'); mode = b.dataset.mode; });
-  $('startBtn').onclick = startGame; $('againBtn').onclick = startGame; $('homeBtn').onclick = showMenu;
+  $('startBtn').onclick = startGame; $('againBtn').onclick = () => mode === 'level' ? startLevel(curLevel) : startGame(); $('homeBtn').onclick = showMenu;
+  $('nextBtn').onclick = () => startLevel(Math.min(LEVEL_COUNT, curLevel + 1)); $('selBtn').onclick = () => { showMenu(); showLevelSel(); }; $('lvBack').onclick = showMenu;
   $('muteBtn').onclick = () => { sfx.init(); sfx.setMuted(!sfx.muted); $('muteBtn').textContent = sfx.muted ? '🔇' : '🔊'; };
   $('pauseBtn').onclick = () => pause(true); $('resumeBtn').onclick = () => pause(false);
   $('quitBtn').onclick = () => { paused = false; showMenu(); };
@@ -773,10 +850,12 @@ function step(dt) {
   if (state === 'play') {
     timeLeft -= dt;
     if (mode !== 'sea') {
-      if (!rushDone && timeLeft <= 50) { rushDone = true; rushT = 15; banner('狂欢时刻！得分×2', '#ffd43b'); sfx.rush(); sfx.setIntense(true); vib([40, 40, 40]); for (let i = 0; i < 5; i++) spawnPickup(); }
+      if (!rushDone && mode !== 'level' && timeLeft <= 50) { rushDone = true; rushT = 15; banner('狂欢时刻！得分×2', '#ffd43b'); sfx.rush(); sfx.setIntense(true); vib([40, 40, 40]); for (let i = 0; i < 5; i++) spawnPickup(); }
       if (rushT > 0) { rushT -= dt; if (rushT <= 0) sfx.setIntense(false); }
     }
     if (comboT > 0) { comboT -= dt; if (comboT <= 0) combo = 0; }
+    if (mode === 'level' && !lvCleared && eatenValue >= totalValue * 0.999) { lvCleared = 0.9; banner('全部吃光！', '#ffd43b'); sfx.levelUp(); }
+    if (lvCleared) { lvCleared -= dt; if (lvCleared <= 0) { endGame('clear'); return; } }
     if (timeLeft <= 0 && mode !== 'sea') { timeLeft = 0; endGame('时间到'); }
   }
   if (sea) { sea.update(dt, state); if (state === 'play' && sea) timeLeft = sea.timeLeft; }
@@ -796,6 +875,7 @@ function step(dt) {
     updateStacks(dt);
     updateFalling(dt);
     updatePickups(dt);
+    for (const c of coins) if (c.state === 0 && !disturbed.has(c)) { c.yaw += dt * 2.6; c.y = Math.sin(gameTime * 3 + c.id) * 0.15; writeMatrix(c); }
   }
   stepMs = stepMs * 0.95 + (performance.now() - t0) * 0.05;
 }
@@ -804,6 +884,7 @@ window.__bh = {
   get state() { return state; }, get player() { return player; }, get holes() { return holes; }, get objs() { return objs; }, get stacks() { return stacks; }, get sea() { return sea; },
   renderer, startGame, step, setMode: (m) => mode = m, setTime: (t) => { timeLeft = t; if (sea) sea.timeLeft = t; },
   get perf() { return { stepMs, renderMs, pr, calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, visTris, visCalls }; },
+  startLevel, showLevelSel, levelDef, get lvFitK() { return lvFitK; }, get timeLeft() { return timeLeft; }, get coins() { return coins; },
   get total() { return totalValue; }, get eaten() { return eatenValue / totalValue; }, get combo() { return comboBest; },
 };
 showMenu();
